@@ -120,16 +120,40 @@ st.markdown(f"""
 # ============================================================
 # DATA LOADING
 # ============================================================
-DATA_DIR = Path(__file__).parent / "data"
+DATA_DIR = Path(__file__).resolve().parent / "data"
 
 @st.cache_data
 def load_data():
-    plots = pd.read_csv(DATA_DIR / "burnwise_master_plots.csv")
-    score_panel = pd.read_csv(DATA_DIR / "burnwise_score_panel.csv")
-    tambon_overview = pd.read_csv(DATA_DIR / "burnwise_tambon_overview.csv")
-    return plots, score_panel, tambon_overview
+    tables = []
+    for name in ["burnwise_master_plots.csv", "burnwise_score_panel.csv", "burnwise_tambon_overview.csv"]:
+        path = DATA_DIR / name
+        if not path.is_file():
+            raise ValueError(f"ไม่พบไฟล์ data/{name} กรุณาอัปโหลด CSV ลงโฟลเดอร์ data")
+        try:
+            table = pd.read_csv(path, encoding="utf-8-sig")
+        except pd.errors.EmptyDataError:
+            raise ValueError(f"ไฟล์ data/{name} ว่าง กรุณาอัปโหลดไฟล์ผลลัพธ์จริงจาก notebook") from None
+        if table.empty:
+            raise ValueError(f"ไฟล์ data/{name} มีหัวตารางแต่ไม่มีแถวข้อมูล")
+        tables.append(table)
+    required = [
+        {"plot_id", "tambon_name", "plot_area_rai", "burn_pct", "tillage_pct", "valid_observation_pct", "tier", "priority_group", "distance_to_collection_km", "access_gap_index", "needs_verification", "centroid_lat", "centroid_lon"},
+        {"tambon_name"},
+        {"tambon_name", "burn_pct (%)", "tillage_pct (%)"},
+    ]
+    for table, columns in zip(tables, required):
+        missing = columns - set(table.columns)
+        if missing:
+            raise ValueError("CSV ขาดคอลัมน์: " + ", ".join(sorted(missing)))
+    return tuple(tables)
 
-plots, score_panel, tambon_overview = load_data()
+try:
+    plots, score_panel, tambon_overview = load_data()
+except (ValueError, OSError, pd.errors.ParserError) as exc:
+    st.error(str(exc))
+    st.stop()
+
+st.caption("ผลเบื้องต้น: สีแดงไม่ได้ยืนยันว่าเผา และสีเขียวไม่ได้ยืนยันว่าไถกลบ ต้องตรวจสอบหลักฐานก่อนใช้กำหนดมาตรการ")
 
 # ============================================================
 # SIDEBAR — nav + global filters
@@ -204,9 +228,9 @@ if page == "ภาพรวม":
     with c2:
         kpi_card("พื้นที่รวม", f"{total_area:,.0f}", "ไร่")
     with c3:
-        kpi_card("แปลงปฏิบัติดี (เขียว)", f"{n_green:,}", f"{n_green/max(len(filtered),1)*100:.1f}% ของแปลงที่แสดง")
+        kpi_card("แปลงกลุ่มเขียว", f"{n_green:,}", f"{n_green/max(len(filtered),1)*100:.1f}% ของแปลงที่แสดง")
     with c4:
-        kpi_card("ต้องช่วยเหลือเร่งด่วน", f"{n_urgent:,}", "เผา + เข้าถึงยาก")
+        kpi_card("ต้องช่วยเหลือเร่งด่วน", f"{n_urgent:,}", "ตามเกณฑ์ Priority เบื้องต้น")
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -228,7 +252,7 @@ if page == "ภาพรวม":
         )
         st.plotly_chart(fig, use_container_width=True)
         st.markdown(
-            "<p class='caption-muted'>'ข้อมูลไม่เพียงพอ' คือแปลงที่สัญญาณเผา+ไถกลบรวมกันต่ำเกินกว่าจะสรุปได้ "
+            "<p class='caption-muted'>'ข้อมูลไม่เพียงพอ' เป็นสถานะจาก notebook ต้องตรวจสอบเกณฑ์และเวอร์ชันข้อมูล "
             "แยกออกจากกลุ่มแดงโดยตั้งใจ ไม่ใช่การนับว่าเผา</p>", unsafe_allow_html=True,
         )
         st.markdown('</div>', unsafe_allow_html=True)
@@ -252,18 +276,18 @@ if page == "ภาพรวม":
         st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="section-card">', unsafe_allow_html=True)
-    st.markdown("#### เปรียบเทียบสัดส่วนเผา / ไถกลบ รายตำบล")
+    st.markdown("#### เปรียบเทียบสัญญาณจากภาพรายตำบล")
     tov = tambon_overview[tambon_overview["tambon_name"].isin(selected_tambons)].copy()
     tov_melt = tov.melt(
         id_vars="tambon_name", value_vars=["burn_pct (%)", "tillage_pct (%)"],
         var_name="ประเภท", value_name="เปอร์เซ็นต์",
     )
     tov_melt["ประเภท"] = tov_melt["ประเภท"].map({
-        "burn_pct (%)": "เผา", "tillage_pct (%)": "ไถกลบ"
+        "burn_pct (%)": "สัญญาณเผา", "tillage_pct (%)": "พืชพรรณลดลง ไม่เข้าเกณฑ์เผา"
     })
     fig3 = px.bar(
         tov_melt, x="tambon_name", y="เปอร์เซ็นต์", color="ประเภท", barmode="group",
-        color_discrete_map={"เผา": COLOR_EMBER, "ไถกลบ": COLOR_GREEN},
+        color_discrete_map={"สัญญาณเผา": COLOR_EMBER, "พืชพรรณลดลง ไม่เข้าเกณฑ์เผา": COLOR_GREEN},
     )
     fig3.update_layout(
         plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
@@ -284,7 +308,7 @@ elif page == "แปลงรายพื้นที่":
     search = st.text_input("ค้นหา plot_id", "")
     table_df = filtered.copy()
     if search:
-        table_df = table_df[table_df["plot_id"].astype(str).str.contains(search, case=False, na=False)]
+        table_df = table_df[table_df["plot_id"].astype(str).str.contains(search, case=False, na=False, regex=False)]
 
     display_cols = [
         "plot_id", "tambon_name", "plot_area_rai", "burn_pct", "tillage_pct",
@@ -334,7 +358,7 @@ else:
     st.markdown("# เกี่ยวกับ BurnWise")
     st.markdown('<div class="section-card">', unsafe_allow_html=True)
     st.markdown("""
-BurnWise ตรวจจับพฤติกรรมการเผา-ไถกลบตอซังข้าวระดับแปลง จากภาพถ่ายดาวเทียม Sentinel-2
+BurnWise วิเคราะห์สัญญาณเผาและการลดลงของพืชพรรณระดับแปลง จากภาพถ่ายดาวเทียม Sentinel-2
 เพื่อจัดลำดับความเร่งด่วนในการให้เงินอุดหนุนเกษตรกรที่เข้าไม่ถึงทางเลือกแทนการเผา
 
 **พื้นที่นำร่อง:** อำเภอท่าตะโก จังหวัดนครสวรรค์ (10 ตำบล)
