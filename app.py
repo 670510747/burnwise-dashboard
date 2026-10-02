@@ -1,331 +1,484 @@
-"""BurnWise dashboard: CSV display only; no Earth Engine credentials required."""
-from pathlib import Path
-from html import escape
-import io
-import numpy as np
-import pandas as pd
-import plotly.express as px
 import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from pathlib import Path
 
-st.set_page_config(page_title="BurnWise · ท่าตะโก", page_icon="🔥", layout="wide")
-BASE = Path(__file__).resolve().parent
-RED, ORANGE, GREY = "#B93C35", "#E56A43", "#B9C2CC"
-STATUS = {"Burn": "ตรวจพบสัญญาณเผา", "No Burn": "ไม่เข้าเกณฑ์ตรวจพบ", "Unknown": "ข้อมูลไม่เพียงพอ"}
-CSS = '''<style>
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&display=swap');
-html,body,[class*="st-"]{font-family:'Noto Sans Thai',sans-serif;}
-.stApp{background:#FFF9F5;color:#422C28;}
-[data-testid="stHeader"]{background:#FFF9F5;}
-.block-container{max-width:1440px;padding:1.6rem 2.5rem 3rem;}
-h1,h2,h3{color:#422C28!important;letter-spacing:-.02em;}
-h1{font-size:2.1rem!important;}
-.brand{font-size:28px;font-weight:700;color:#B93C35;line-height:1.1;}
-.brand small{display:block;font-size:10px;letter-spacing:1.4px;color:#7D665D;margin-top:8px;}
-.st-key-navigation{background:white;border:1px solid #F1DED2;border-radius:18px;padding:18px 22px;margin-bottom:18px;}
-.st-key-navigation [data-testid="stRadio"]>div{gap:8px;justify-content:flex-end;}
-.st-key-navigation [data-testid="stRadio"] label{padding:8px 14px;border-radius:12px;}
-.st-key-navigation [data-testid="stRadio"] label:has(input:checked){background:#FFF0E7;color:#B93C35;}
-.st-key-filters{background:#fff;border:1px solid #F1DED2;border-radius:18px;padding:12px 18px;margin:12px 0 20px;}
-[data-testid="stVerticalBlockBorderWrapper"]>div{border-color:#F1DED2!important;border-radius:18px!important;background:#fff;}
-.metric{background:#fff;border:1px solid #F1DED2;border-radius:18px;padding:20px;min-height:145px;}
-.metric .label{color:#7D665D;font-size:13px;border-left:4px solid var(--accent);padding-left:12px;}
-.metric .value{font-size:34px;font-weight:700;color:var(--accent);margin:10px 0 4px;}
-.metric .note{font-size:12px;color:#7D665D;}
-[data-testid="stSidebar"]{background:#fff;border-right:1px solid #F1DED2;}
-.stButton button[kind="primary"],.stDownloadButton button[kind="primary"]{background:#B93C35;border-color:#B93C35;color:#fff;}
-button{border-radius:10px!important;}
-[data-baseweb="tag"]{background:#FFF0E7!important;color:#8F2D2B!important;}
-@media(max-width:800px){.block-container{padding:1rem}.metric{padding:15px;min-height:135px}.metric .value{font-size:28px}.st-key-navigation [data-testid="stRadio"]>div{justify-content:flex-start;}}
-</style>'''
-st.markdown(CSS, unsafe_allow_html=True)
+# ============================================================
+# PAGE CONFIG
+# ============================================================
+st.set_page_config(
+    page_title="BurnWise · Tha Tako Field Insights",
+    page_icon="🔥",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
 
+# ============================================================
+# DESIGN TOKENS — ตรงกับเทมเพลต BurnWise_Desktop_Overview.svg / Explore.svg
+# ============================================================
+BG          = "#FFF9F5"
+CARD        = "#FFFFFF"
+BORDER      = "#F1DED2"
+TAG_BG      = "#FFF0E7"
+INK         = "#422C28"
+INK_MUTED   = "#7D665D"
+RED         = "#B93C35"   # Burn
+ORANGE      = "#E56A43"   # No Burn (ไม่เข้าเกณฑ์ตรวจพบ)
+GREY_TEXT   = "#566370"   # ข้อมูลไม่เพียงพอ
+GREY_BG     = "#F2F4F6"
+GREY_BORDER = "#B9C2CC"
 
-def read_csv(source):
-    """Keep leading zeroes in IDs and report empty/broken files cleanly."""
-    try:
-        frame = pd.read_csv(source, encoding="utf-8-sig", dtype={"plot_id": "string", "tambon_id": "string"})
-    except pd.errors.EmptyDataError:
-        raise ValueError("CSV ว่าง: ส่งออกไฟล์จาก notebook ใหม่ก่อนนำมาใช้") from None
-    except (UnicodeDecodeError, pd.errors.ParserError):
-        raise ValueError("อ่าน CSV ไม่ได้ กรุณาส่งออกเป็น UTF-8 CSV จาก notebook") from None
-    frame.columns = frame.columns.astype(str).str.strip()
-    if frame.empty:
-        raise ValueError("CSV มีเฉพาะหัวตาราง แต่ยังไม่มีข้อมูลแปลง")
-    return frame
+STATUS_COLORS = {"Burn": RED, "No Burn": ORANGE, "ข้อมูลไม่เพียงพอ": GREY_BORDER}
+STATUS_LABELS = {"Burn": "ตรวจพบสัญญาณเผา", "No Burn": "ไม่เข้าเกณฑ์ตรวจพบ", "ข้อมูลไม่เพียงพอ": "ข้อมูลไม่เพียงพอ"}
+STATUS_ORDER = ["Burn", "No Burn", "ข้อมูลไม่เพียงพอ"]
 
+TIER_COLORS = {"Green": "#3F8B5C", "Yellow": "#D9A441", "Red": RED, "Unknown": GREY_BORDER}
+TIER_ORDER = ["Green", "Yellow", "Red", "Unknown"]
 
-def prepare(frame):
-    frame = frame.copy()
-    required = {"plot_id", "tambon_name", "plot_area_rai", "burn_pct"}
-    missing = required - set(frame)
-    if missing:
-        raise ValueError("CSV ขาดคอลัมน์: " + ", ".join(sorted(missing)))
-    if frame["plot_id"].isna().any() or frame["plot_id"].astype(str).str.strip().eq("").any() or frame["plot_id"].duplicated().any():
-        raise ValueError("plot_id ต้องมีค่าครบและไม่ซ้ำ กรุณาตรวจไฟล์ต้นทาง")
-    if frame["tambon_name"].isna().any():
-        raise ValueError("พบแปลงไม่มีชื่อตำบล กรุณาตรวจการเชื่อมข้อมูลต้นทาง")
-    numeric = ["plot_area_rai", "burn_pct", "valid_observation_pct", "unknown_pct", "distance_to_collection_km", "access_gap_index", "centroid_lat", "centroid_lon", "tambon_income_baht_year"]
-    for col in numeric:
-        if col not in frame:
-            frame[col] = np.nan
-        original = frame[col]
-        frame[col] = pd.to_numeric(original, errors="coerce")
-        if (original.notna() & frame[col].isna()).any() or np.isinf(frame[col]).any():
-            raise ValueError(f"คอลัมน์ {col} มีค่าที่ไม่ใช่ตัวเลข กรุณาตรวจ CSV")
-    for col, lo, hi in [("burn_pct", 0, 100), ("valid_observation_pct", 0, 100), ("unknown_pct", 0, 100), ("access_gap_index", 0, 1), ("centroid_lat", -90, 90), ("centroid_lon", -180, 180)]:
-        if ((frame[col] < lo) | (frame[col] > hi)).any():
-            raise ValueError(f"{col} ต้องอยู่ในช่วง {lo}–{hi} กรุณาตรวจการคำนวณต้นทาง")
-    if (frame["plot_area_rai"] < 0).any() or frame["plot_area_rai"].isna().any() or (frame["distance_to_collection_km"] < 0).any():
-        raise ValueError("พื้นที่แปลงต้องมีค่าครบ และพื้นที่/ระยะทางต้องไม่ติดลบ")
-    if "burn_status" in frame:
-        if not frame["burn_status"].isin(STATUS).all():
-            raise ValueError("burn_status ต้องเป็น Burn, No Burn หรือ Unknown เท่านั้น")
-        mode = "modern"
-        frame["display_status"] = frame["burn_status"].map(STATUS)
-    elif "tier" in frame:
-        if not frame["tier"].isin(["เขียว", "เหลือง", "แดง", "ข้อมูลไม่เพียงพอ"]).all():
-            raise ValueError("tier มีค่าที่ไม่รู้จัก กรุณาตรวจ CSV")
-        mode = "legacy"
-        frame["display_status"] = frame["tier"].map({"เขียว": "Tier เขียว (เดิม)", "เหลือง": "Tier เหลือง (เดิม)", "แดง": "Tier แดง (เดิม)", "ข้อมูลไม่เพียงพอ": "ข้อมูลไม่เพียงพอ"})
-    else:
-        raise ValueError("ต้องมี burn_status จากโค้ดล่าสุด หรือ tier จากไฟล์เดิม เว็บจะไม่เดาสถานะเอง")
-    for col in ["exclusion_reason", "priority_group", "needs_verification"]:
-        if col not in frame:
-            frame[col] = ""
-    values = frame["needs_verification"].fillna("").astype(str).str.strip()
-    frame["review_flag"] = ~values.str.lower().isin(["", "false", "0", "0.0", "none", "nan"])
-    frame["review_flag"] |= frame["display_status"].eq("ข้อมูลไม่เพียงพอ") | frame["exclusion_reason"].fillna("").astype(str).str.strip().ne("")
-    return frame, mode
+PAGES = ["ภาพรวม", "สำรวจแปลง", "คุณภาพข้อมูล", "เกี่ยวกับโครงการ"]
 
+REQUIRED_COLS = {
+    "plot_id", "tambon_name", "burn_status", "burn_pct",
+    "valid_observation_pct", "exclusion_reason",
+}
 
-def chart_style(fig, height=350):
-    fig.update_layout(template="plotly_white", paper_bgcolor="#FFFFFF", plot_bgcolor="#FFFFFF", font=dict(family="Noto Sans Thai, sans-serif", color="#422C28"), height=height, margin=dict(l=10, r=10, t=20, b=10), legend=dict(title=None, orientation="h", y=-.22), hoverlabel=dict(bgcolor="white"))
-    fig.update_xaxes(gridcolor="#F7EAE4")
-    fig.update_yaxes(gridcolor="#F7EAE4")
-    return fig
+# ============================================================
+# CSS
+# ============================================================
+st.markdown(f"""
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+    html, body, [class*="css"] {{ font-family: 'Noto Sans Thai', 'Sarabun', sans-serif; color: {INK}; }}
+    .stApp {{ background-color: {BG}; }}
+    #MainMenu, footer, header[data-testid="stHeader"] {{ background: transparent; }}
 
+    h1, h2, h3 {{ color: {INK} !important; font-weight: 700 !important; }}
 
-def csv_bytes(frame):
-    return frame.to_csv(index=False).encode("utf-8-sig")
+    .bw-nav {{
+        display: flex; align-items: center; justify-content: space-between;
+        background: {CARD}; border-bottom: 1px solid {BORDER};
+        padding: 14px 8px; margin: -1rem -1rem 1.2rem -1rem;
+    }}
+    .bw-logo {{ display: flex; align-items: center; gap: 12px; }}
+    .bw-logo-mark {{
+        width: 38px; height: 38px; border-radius: 11px; background: {RED};
+        display: flex; align-items: center; justify-content: center;
+        color: white; font-size: 18px;
+    }}
+    .bw-logo-text {{ line-height: 1.1; }}
+    .bw-logo-title {{ font-size: 20px; font-weight: 700; color: {RED}; }}
+    .bw-logo-sub {{ font-size: 8px; font-weight: 600; color: {INK_MUTED}; letter-spacing: 0.08em; }}
+
+    .bw-banner {{
+        background: {TAG_BG}; border-radius: 10px; padding: 10px 16px;
+        color: {RED}; font-size: 13px; font-weight: 500; margin-bottom: 1.2rem;
+    }}
+
+    .bw-card {{
+        background: {CARD}; border: 1px solid {BORDER}; border-radius: 18px;
+        padding: 1.3rem 1.4rem; margin-bottom: 1.1rem;
+    }}
+    .kpi-card {{ background: {CARD}; border: 1px solid {BORDER}; border-radius: 18px;
+        padding: 1.1rem 1.3rem; height: 100%; border-left: 5px solid var(--accent, {RED}); }}
+    .kpi-label {{ font-size: 0.82rem; color: {INK_MUTED}; font-weight: 500; margin-bottom: 0.5rem; }}
+    .kpi-value {{ font-size: 2.1rem; font-weight: 700; line-height: 1.1; color: var(--accent, {RED}); }}
+    .kpi-sub {{ font-size: 0.78rem; color: {INK_MUTED}; margin-top: 0.4rem; }}
+
+    .pill {{ display: inline-block; padding: 0.2rem 0.75rem; border-radius: 999px; font-size: 0.78rem; font-weight: 500; }}
+    .caption-muted {{ color: {INK_MUTED}; font-size: 0.85rem; }}
+
+    div[role="radiogroup"] {{ gap: 6px; }}
+    div[role="radiogroup"] label {{
+        background: {CARD}; border: 1px solid {BORDER}; border-radius: 12px;
+        padding: 8px 16px !important; margin: 0 !important;
+    }}
+</style>
+""", unsafe_allow_html=True)
 
 
-def metric(label, value, note, color=RED):
-    st.markdown(f'<div class="metric" style="--accent:{color}"><div class="label">{escape(label)}</div><div class="value">{escape(str(value))}</div><div class="note">{escape(note)}</div></div>', unsafe_allow_html=True)
+# ============================================================
+# DEMO DATA — ใช้เมื่อยังไม่มี CSV จริงใน data/ (ธนาคารตัวเลขอ้างอิงจากเทมเพลต)
+# ============================================================
+@st.cache_data
+def make_demo_data(seed=42, n=12000):
+    rng = np.random.default_rng(seed)
+    tambons = ["ท่าตะโก", "ดอนคา", "ทำนบ", "พนมรอก", "หนองหลวง",
+               "สายลำโพง", "วังใหญ่", "พนมเศษ", "วังมหากร", "หัวถนน"]
+    tambon_name = rng.choice(tambons, size=n)
+
+    status = rng.choice(STATUS_ORDER, size=n, p=[0.23, 0.52, 0.25])
+    burn_pct = np.where(
+        status == "Burn", rng.uniform(10, 95, n),
+        np.where(status == "No Burn", rng.uniform(0, 9.9, n), np.nan)
+    )
+    valid_obs = np.where(status == "ข้อมูลไม่เพียงพอ", rng.uniform(10, 79, n), rng.uniform(80, 100, n))
+    exclusion_reason = np.where(
+        status == "ข้อมูลไม่เพียงพอ",
+        rng.choice(["ภาพใช้ได้ไม่พอ (< 80%)", "แปลงเล็กกว่า 0.1 ไร่", "ไม่มีพิกเซลเกษตรในแปลง"], size=n),
+        None,
+    )
+    tier = np.select(
+        [status == "No Burn", (status == "Burn") & (burn_pct < 50), (status == "Burn") & (burn_pct >= 50), status == "ข้อมูลไม่เพียงพอ"],
+        ["Green", "Yellow", "Red", "Unknown"],
+        default="Unknown",
+    )
+    access_gap = np.clip(rng.normal(0.55, 0.18, n), 0.02, 0.99)
+    distance_km = np.clip(rng.exponential(6, n), 0.1, 28)
+    needs_verification = np.where(
+        (status == "Burn") & (np.abs(np.nan_to_num(burn_pct) - 10) <= 3),
+        "ตรวจสอบซ้ำ: สัดส่วน Burn ใกล้เกณฑ์", None
+    )
+
+    df = pd.DataFrame({
+        "plot_id": [f"DEMO-{i:05d}" for i in range(n)],
+        "tambon_id": pd.factorize(tambon_name)[0] + 1,
+        "tambon_name": tambon_name,
+        "plot_area_rai": np.round(rng.gamma(2, 2.5, n), 2),
+        "burn_pct": np.round(burn_pct, 1),
+        "burn_status": status,
+        "burn_tier": tier,
+        "valid_observation_pct": np.round(valid_obs, 1),
+        "unknown_pct": np.round(100 - valid_obs, 1),
+        "exclusion_reason": exclusion_reason,
+        "centroid_lat": rng.uniform(15.58, 15.84, n),
+        "centroid_lon": rng.uniform(100.33, 100.60, n),
+        "distance_to_collection_km": np.round(distance_km, 1),
+        "access_gap_index": np.round(access_gap, 3),
+        "needs_verification": needs_verification,
+    })
+    return df
 
 
-def status_chart(frame):
-    counts = pd.crosstab(frame["tambon_name"], frame["display_status"]).reindex(columns=order, fill_value=0)
-    counts.index.name = "tambon_name"
-    pct = counts.div(counts.sum(axis=1), axis=0).mul(100)
-    table = pct.reset_index().melt(id_vars="tambon_name", var_name="สถานะ", value_name="สัดส่วน (%)")
-    actual = counts.reset_index().melt(id_vars="tambon_name", var_name="สถานะ", value_name="จำนวนแปลง")
-    table = table.merge(actual, on=["tambon_name", "สถานะ"], validate="one_to_one")
-    fig = px.bar(table, x="สัดส่วน (%)", y="tambon_name", color="สถานะ", orientation="h", color_discrete_map=colors, category_orders={"สถานะ": order}, hover_data={"จำนวนแปลง": True, "สัดส่วน (%)": ":.1f"}, labels={"tambon_name": ""}, barmode="stack")
-    return chart_style(fig, max(340, len(counts) * 35 + 110)), counts
+# ============================================================
+# DATA LOADING — ใช้ CSV จริงถ้ามี ไม่งั้น fallback เป็นข้อมูลตัวอย่าง
+# ============================================================
+DATA_DIR = Path(__file__).parent / "data"
+
+@st.cache_data
+def load_data():
+    plots_path = DATA_DIR / "burnwise_master_plots.csv"
+    if plots_path.exists():
+        df = pd.read_csv(plots_path)
+        missing = REQUIRED_COLS - set(df.columns)
+        if missing:
+            raise ValueError(
+                f"burnwise_master_plots.csv ขาดคอลัมน์ที่จำเป็น: {sorted(missing)} "
+                f"— ต้อง export จากส่วน J ของ BurnWise_Team_Merged_with_Charts.ipynb เวอร์ชันล่าสุด"
+            )
+        if df["plot_id"].isna().any() or df["plot_id"].duplicated().any():
+            raise ValueError("plot_id ว่างหรือซ้ำในไฟล์ CSV — ตรวจตารางหลักก่อนอัปโหลด")
+        return df, False
+    return make_demo_data(), True
 
 
-def show_map(frame, limit=12000):
-    located = frame.dropna(subset=["centroid_lat", "centroid_lon"])
-    if located.empty:
-        st.info("ยังไม่มี centroid_lat / centroid_lon สำหรับแสดงแผนที่")
-        return
-    sampled = located if len(located) <= limit else located.sample(limit, random_state=42)
-    fig = px.scatter_map(sampled, lat="centroid_lat", lon="centroid_lon", color="display_status", color_discrete_map=colors, category_orders={"display_status": order}, hover_name="plot_id", hover_data={"tambon_name": True, "burn_pct": ":.1f", "distance_to_collection_km": ":.2f", "centroid_lat": False, "centroid_lon": False}, zoom=10, center={"lat": located["centroid_lat"].median(), "lon": located["centroid_lon"].median()}, map_style="open-street-map", labels={"display_status": "สถานะ", "burn_pct": "สัญญาณเผา (%)", "distance_to_collection_km": "ระยะทาง (กม.)", "tambon_name": "ตำบล"})
-    fig.update_traces(marker=dict(size=7, opacity=.7))
-    fig.update_layout(height=430, margin=dict(l=0, r=0, t=0, b=0), legend=dict(title=None, orientation="h"))
-    st.plotly_chart(fig, width="stretch")
-    st.caption(f"จุดกึ่งกลางแปลง {len(sampled):,} / {len(located):,} จุดที่มีพิกัด · ขาดพิกัด {len(frame)-len(located):,} แปลง · ไม่ใช่ขอบเขตแปลง" + (" · สุ่มเพื่อให้แผนที่โหลดเร็ว; ตัวเลขสรุปใช้ข้อมูลครบ" if len(sampled) < len(located) else ""))
-
-
-def show_scatter(frame):
-    eligible = frame[~frame["display_status"].eq("ข้อมูลไม่เพียงพอ")].dropna(subset=["burn_pct", "access_gap_index"])
-    if eligible.empty:
-        st.info("ยังไม่มีแปลงที่มีสถานะและค่า burn_pct / access_gap_index ครบ")
-        return
-    sampled = eligible if len(eligible) <= 6000 else eligible.sample(6000, random_state=42)
-    fig = px.scatter(sampled, x="access_gap_index", y="burn_pct", color="display_status", color_discrete_map=colors, hover_name="plot_id", hover_data=["tambon_name"], opacity=.55, labels={"access_gap_index": "Access Gap (0–1)", "burn_pct": "สัดส่วนสัญญาณเผา (%)", "display_status": "สถานะ"})
-    fig.update_traces(marker=dict(size=5))
-    fig.update_xaxes(range=[0, 1]); fig.update_yaxes(range=[0, 100])
-    st.plotly_chart(chart_style(fig, 430), width="stretch")
-    st.caption(f"แสดง {len(sampled):,} / {len(eligible):,} แปลงที่มีค่าครบและไม่อยู่กลุ่มข้อมูลไม่พอ · ใช้สำรวจความสัมพันธ์ ไม่ใช้ยืนยันสาเหตุ")
-
-
-def demo_data():
-    # Deliberately synthetic; selected by the user only. No export to project CSV.
-    rng = np.random.default_rng(42)
-    n = 600
-    status = rng.choice(list(STATUS), n, p=[.23, .52, .25])
-    burn = np.where(status == "Burn", rng.uniform(10, 90, n), rng.uniform(0, 9, n))
-    burn[status == "Unknown"] = np.nan
-    return pd.DataFrame({"plot_id": [f"DEMO-{i:04}" for i in range(n)], "tambon_name": rng.choice(["ต.ท่าตะโก", "ต.ดอนคา", "ต.ทำนบ", "ต.พนมรอก"], n), "plot_area_rai": rng.uniform(.5, 20, n), "burn_status": status, "burn_pct": burn, "valid_observation_pct": np.where(status == "Unknown", rng.uniform(10, 70, n), rng.uniform(80, 100, n)), "centroid_lat": rng.uniform(15.5, 15.8, n), "centroid_lon": rng.uniform(100.3, 100.6, n), "access_gap_index": rng.uniform(0, 1, n), "distance_to_collection_km": rng.uniform(0, 25, n), "exclusion_reason": np.where(status == "Unknown", "ข้อมูลจำลอง: coverage ไม่พอ", ""), "needs_verification": status == "Unknown"})
-
-
-with st.sidebar:
-    st.markdown("### ข้อมูลของโครงการ")
-    st.caption("ใส่ CSV ใน data/ บน GitHub หรืออัปโหลดเพื่อดูในเซสชันนี้")
-    uploaded = st.file_uploader("ตารางแปลง burnwise_master_plots.csv", type=["csv"], key="plots_upload")
-    optional_overview = st.file_uploader("ภาพรวมตำบล (ไม่จำเป็น)", type=["csv"], key="overview_upload")
-    demo = st.toggle("ทดลองหน้าตาด้วยข้อมูลจำลอง", value=False)
-    period = st.text_input("ช่วงศึกษาที่ระบุใน notebook", placeholder="เช่น พ.ย. 2568 – ม.ค. 2569")
-    st.caption("ชื่อช่วงศึกษาใช้แสดงประกอบเท่านั้น ไม่ได้กรองวันที่ใน CSV")
-
-with st.container(key="navigation"):
-    brand, nav = st.columns([1, 3], vertical_alignment="center")
-    brand.markdown('<div class="brand">🔥 BurnWise<small>THA TAKO · FIELD INSIGHTS</small></div>', unsafe_allow_html=True)
-    page = nav.radio("หน้าเว็บ", ["ภาพรวม", "สำรวจแปลง", "คุณภาพข้อมูล", "เกี่ยวกับโครงการ"], horizontal=True, label_visibility="collapsed")
-
-path = BASE / "data" / "burnwise_master_plots.csv"
 try:
-    if demo:
-        raw = demo_data(); source_name = "ข้อมูลจำลอง"
-    elif uploaded is not None:
-        raw = read_csv(io.BytesIO(uploaded.getvalue())); source_name = uploaded.name
-    elif path.is_file():
-        raw = read_csv(path); source_name = "data/burnwise_master_plots.csv"
-    else:
-        st.title("เริ่มต้นใช้งาน BurnWise")
-        st.info("อัปโหลด burnwise_master_plots.csv ทางซ้าย หรือเพิ่มไฟล์นี้ในโฟลเดอร์ data ของ GitHub")
-        st.markdown("เปิด **ทดลองหน้าตาด้วยข้อมูลจำลอง** เพื่อดูหน้าเว็บก่อนนำข้อมูลจริงเข้ามา")
-        st.stop()
-    plots, mode = prepare(raw)
-except (ValueError, OSError) as exc:
-    st.error(str(exc)); st.stop()
+    plots, is_demo = load_data()
+except ValueError as e:
+    st.error(f"โหลดข้อมูลไม่สำเร็จ: {e}")
+    st.stop()
 
-if mode == "modern":
-    order = list(STATUS.values()); colors = dict(zip(order, [RED, ORANGE, GREY]))
-else:
-    order = ["Tier เขียว (เดิม)", "Tier เหลือง (เดิม)", "Tier แดง (เดิม)", "ข้อมูลไม่เพียงพอ"]
-    colors = dict(zip(order, ["#3A8B62", "#EDA340", RED, GREY]))
-if demo:
-    st.warning("ข้อมูลจำลองทั้งหมด: ใช้ตรวจหน้าตาเว็บเท่านั้น ตัวเลขและพิกัดไม่ใช่ผลของโครงการ")
-elif mode == "legacy":
-    st.warning("ไฟล์นี้ใช้ Tier เดิมจากสัดส่วนไถกลบ: แสดงกลุ่มตามต้นทาง ไม่แปลงเป็น Burn / No Burn · valid_observation_pct เดิมอาจเป็นผลรวมเผา+ไถกลบ จึงยังใช้ยืนยัน coverage ไม่ได้")
-else:
-    st.caption("ผลจากดาวเทียมเบื้องต้น · No Burn = ไม่เข้าเกณฑ์ตรวจพบ ไม่ใช่หลักฐานยืนยันว่าไม่เผาหรือไถกลบ")
-st.caption(f"แหล่งข้อมูล: {source_name}" + (f" · ช่วงศึกษา: {period}" if period else " · ยังไม่ได้ระบุช่วงศึกษา"))
+# ============================================================
+# TOP NAV
+# ============================================================
+st.markdown(f"""
+<div class="bw-nav">
+    <div class="bw-logo">
+        <div class="bw-logo-mark">🔥</div>
+        <div class="bw-logo-text">
+            <div class="bw-logo-title">BurnWise</div>
+            <div class="bw-logo-sub">THA TAKO · FIELD INSIGHTS</div>
+        </div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
-with st.container(key="filters"):
-    a, b = st.columns(2)
-    names = sorted(plots["tambon_name"].unique())
-    selected_names = a.multiselect("ตำบล", names, default=names)
-    selected_status = b.multiselect("สถานะ", order, default=order)
-f = plots[plots["tambon_name"].isin(selected_names) & plots["display_status"].isin(selected_status)].copy()
-if f.empty:
-    st.info("ไม่มีแปลงตรงกับตัวกรอง กรุณาเลือกตำบลหรือสถานะเพิ่ม"); st.stop()
+page = st.radio("เมนู", PAGES, horizontal=True, label_visibility="collapsed")
 
-export_cols = [c for c in f.columns if c not in ["display_status", "review_flag"]]
-st.download_button("↓ ดาวน์โหลดแปลงที่เลือก", csv_bytes(f[export_cols]), "burnwise_filtered_plots.csv", "text/csv", type="primary")
+if is_demo:
+    st.markdown(
+        '<div class="bw-banner">เทมเพลตตัวอย่าง · ตัวเลข กราฟ และแผนที่เป็นข้อมูลจำลอง '
+        'ยังไม่เชื่อมไฟล์ผลลัพธ์จริง — วาง burnwise_master_plots.csv ไว้ในโฟลเดอร์ data/ '
+        'เพื่อแสดงผลจริง</div>',
+        unsafe_allow_html=True,
+    )
 
+# ============================================================
+# HELPERS
+# ============================================================
+def kpi_card(label, value, sub, accent):
+    st.markdown(f"""
+    <div class="kpi-card" style="--accent: {accent};">
+        <div class="kpi-label">{label}</div>
+        <div class="kpi-value">{value}</div>
+        <div class="kpi-sub">{sub}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def status_pill(status):
+    color = {"Burn": RED, "No Burn": ORANGE, "ข้อมูลไม่เพียงพอ": GREY_TEXT}.get(status, GREY_TEXT)
+    bg = TAG_BG if status != "ข้อมูลไม่เพียงพอ" else GREY_BG
+    label = STATUS_LABELS.get(status, status)
+    return f'<span class="pill" style="background:{bg}; color:{color};">{label}</span>'
+
+
+# ============================================================
+# SIDEBAR FILTERS (ใช้แทนแถบตัวกรองแนวนอนของเทมเพลต เพื่อความเร็วในการพัฒนา)
+# ============================================================
+with st.sidebar:
+    st.markdown("### ตัวกรอง")
+    tambon_opt = sorted(plots["tambon_name"].unique().tolist())
+    sel_tambon = st.multiselect("ตำบล", tambon_opt, default=tambon_opt)
+    sel_status = st.multiselect("สถานะ", STATUS_ORDER, default=STATUS_ORDER,
+                                 format_func=lambda s: STATUS_LABELS.get(s, s))
+
+filtered = plots[plots["tambon_name"].isin(sel_tambon) & plots["burn_status"].isin(sel_status)]
+
+# ============================================================
+# PAGE: ภาพรวม
+# ============================================================
 if page == "ภาพรวม":
-    st.title("ภาพรวมพื้นที่นำร่อง")
-    st.caption(f"อำเภอท่าตะโก · {len(f):,} จาก {len(plots):,} แปลง · {f['tambon_name'].nunique()} ตำบล · พื้นที่รวม {f['plot_area_rai'].sum():,.1f} ไร่")
-    if mode == "modern":
-        cards = [("แปลงทั้งหมด", len(f), "แปลงในตัวกรอง", RED)] + [(label, int(f["display_status"].eq(label).sum()), f"{f['display_status'].eq(label).mean()*100:.1f}% ของแปลงที่เลือก", colors[label]) for label in order]
+    st.markdown("# ภาพรวมพื้นที่นำร่อง")
+    st.markdown(
+        f'<p class="caption-muted">อำเภอท่าตะโก · แสดง {len(filtered):,} แปลง '
+        f'จากทั้งหมด {len(plots):,} แปลง</p>', unsafe_allow_html=True,
+    )
+
+    n_total = len(filtered)
+    n_burn = (filtered["burn_status"] == "Burn").sum()
+    n_noburn = (filtered["burn_status"] == "No Burn").sum()
+    n_unknown = (filtered["burn_status"] == "ข้อมูลไม่เพียงพอ").sum()
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        kpi_card("แปลงทั้งหมด", f"{n_total:,}", "แปลง", RED)
+    with c2:
+        kpi_card("ตรวจพบสัญญาณเผา", f"{n_burn:,}",
+                  f"{n_burn/max(n_total,1)*100:.1f}% ของแปลงที่แสดง", RED)
+    with c3:
+        kpi_card("ไม่เข้าเกณฑ์ตรวจพบ", f"{n_noburn:,}",
+                  f"{n_noburn/max(n_total,1)*100:.1f}% ของแปลงที่แสดง", ORANGE)
+    with c4:
+        kpi_card("ข้อมูลไม่เพียงพอ", f"{n_unknown:,}",
+                  f"{n_unknown/max(n_total,1)*100:.1f}% · แยกจาก No Burn", GREY_TEXT)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    col_left, col_right = st.columns([1.3, 1])
+
+    with col_left:
+        st.markdown('<div class="bw-card">', unsafe_allow_html=True)
+        st.markdown("#### สถานะรายตำบล")
+        st.markdown('<p class="caption-muted">จำนวนแปลงแยกตามสถานะ</p>', unsafe_allow_html=True)
+        counts = (filtered.groupby(["tambon_name", "burn_status"]).size()
+                  .unstack(fill_value=0).reindex(columns=STATUS_ORDER, fill_value=0))
+        fig = go.Figure()
+        for s in STATUS_ORDER:
+            fig.add_bar(y=counts.index, x=counts[s], name=STATUS_LABELS[s],
+                        orientation="h", marker_color=STATUS_COLORS[s])
+        fig.update_layout(
+            barmode="stack", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+            font_family="Noto Sans Thai", margin=dict(t=10, b=10, l=10, r=10), height=360,
+            legend=dict(orientation="h", yanchor="bottom", y=1.02),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        st.markdown(
+            '<p class="caption-muted">ข้อมูลไม่เพียงพอ แยกจาก "ไม่เข้าเกณฑ์ตรวจพบ" เสมอ '
+            'ไม่ถูกนับรวมเป็น No Burn</p>', unsafe_allow_html=True,
+        )
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with col_right:
+        st.markdown('<div class="bw-card">', unsafe_allow_html=True)
+        st.markdown("#### Access Gap vs สัดส่วนเผา")
+        scatter_df = filtered.dropna(subset=["access_gap_index", "burn_pct"])
+        fig2 = px.scatter(
+            scatter_df, x="access_gap_index", y="burn_pct", color="burn_status",
+            color_discrete_map=STATUS_COLORS, opacity=0.55,
+            labels={"access_gap_index": "Access Gap (0–1)", "burn_pct": "สัดส่วนเผา (%)"},
+        )
+        fig2.add_vline(x=0.6, line_dash="dash", line_color=ORANGE)
+        fig2.update_layout(
+            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+            font_family="Noto Sans Thai", margin=dict(t=10, b=10, l=10, r=10), height=360,
+            showlegend=False,
+        )
+        st.plotly_chart(fig2, use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="bw-card">', unsafe_allow_html=True)
+    st.markdown("#### แปลงที่ควรตรวจสอบเพิ่มเติม")
+    st.markdown('<p class="caption-muted">แยกเหตุผลก่อนเสนอการช่วยเหลือ</p>', unsafe_allow_html=True)
+    review_df = filtered[
+        filtered["needs_verification"].notna() | filtered["exclusion_reason"].notna()
+    ].copy()
+    if review_df.empty:
+        st.info("ไม่มีแปลงที่ต้องตรวจสอบเพิ่มเติมในตัวกรองปัจจุบัน")
     else:
-        cards = [("แปลงทั้งหมด", len(f), "แปลงในตัวกรอง", RED), ("พื้นที่รวม (ไร่)", f"{f['plot_area_rai'].sum():,.0f}", "ผลรวมพื้นที่แปลงตาม CSV", ORANGE), ("Tier แดง (เดิม)", int(f["display_status"].eq("Tier แดง (เดิม)").sum()), "กลุ่มจากตรรกะเดิม ไม่ยืนยันว่าเผา", RED), ("ข้อมูลไม่เพียงพอ", int(f["display_status"].eq("ข้อมูลไม่เพียงพอ").sum()), "แยกจากกลุ่มที่จัดสถานะได้", "#566370")]
-    for col, (label, value, note, color) in zip(st.columns(4), cards):
-        with col: metric(label, f"{value:,}" if isinstance(value, int) else value, note, "#566370" if color == GREY else color)
-    left, right = st.columns([1.1, 1])
-    with left, st.container(border=True):
-        st.subheader("สถานะรายตำบล")
-        st.caption("สัดส่วนจำนวนแปลงในตัวกรอง รวมกลุ่มข้อมูลไม่พอ")
-        fig, counts = status_chart(f); st.plotly_chart(fig, width="stretch")
-        st.download_button("ดาวน์โหลดจำนวนแปลงรายตำบล", csv_bytes(counts.reset_index()), "burnwise_tambon_counts.csv", "text/csv")
-    with right, st.container(border=True):
-        st.subheader("สัดส่วนสัญญาณเผารายตำบล")
-        overview = None
-        overview_path = BASE / "data" / "burnwise_tambon_overview.csv"
-        if not demo and (optional_overview is not None or overview_path.is_file()):
-            try:
-                overview = read_csv(io.BytesIO(optional_overview.getvalue()) if optional_overview else overview_path)
-                if not {"tambon_name", "burn_pct (%)"}.issubset(overview):
-                    raise ValueError("ภาพรวมตำบลต้องมี tambon_name และ burn_pct (%)")
-                if overview["tambon_name"].duplicated().any():
-                    raise ValueError("ตารางภาพรวมตำบลมีชื่อตำบลซ้ำ")
-                overview["burn_pct (%)"] = pd.to_numeric(overview["burn_pct (%)"], errors="raise")
-                if not overview["burn_pct (%)"].dropna().between(0, 100).all():
-                    raise ValueError("burn_pct (%) ต้องอยู่ในช่วง 0–100")
-                overview = overview[overview["tambon_name"].isin(selected_names)].dropna(subset=["burn_pct (%)"])
-            except (ValueError, OSError) as exc:
-                st.warning(f"ไม่แสดงภาพรวมตำบล: {exc}"); overview = None
-        if overview is not None and not overview.empty:
-            fig = px.bar(overview.sort_values("burn_pct (%)"), x="burn_pct (%)", y="tambon_name", orientation="h", color_discrete_sequence=[RED], labels={"tambon_name": "", "burn_pct (%)": "สัดส่วนพื้นที่ (%)"})
-            st.plotly_chart(chart_style(fig), width="stretch")
-            st.caption("ใช้ตารางภาพรวมจาก notebook ตามตำบลที่เลือก · ไม่เปลี่ยนตามตัวกรองสถานะแปลง · ฐานพื้นที่ต่างจากกราฟจำนวนแปลง")
-            st.dataframe(overview, hide_index=True, width="stretch")
-        else:
-            mean_burn = f[~f["display_status"].eq("ข้อมูลไม่เพียงพอ")].groupby("tambon_name", as_index=False)["burn_pct"].mean().dropna()
-            if mean_burn.empty:
-                st.info("ยังไม่มีค่าสัญญาณเผาในแปลงที่จัดสถานะได้")
-            else:
-                fig = px.bar(mean_burn.sort_values("burn_pct"), x="burn_pct", y="tambon_name", orientation="h", color_discrete_sequence=[RED], labels={"tambon_name": "", "burn_pct": "ค่าเฉลี่ยต่อแปลง (%)"})
-                st.plotly_chart(chart_style(fig), width="stretch")
-            st.caption("ค่าเฉลี่ย burn_pct ต่อแปลงที่ไม่อยู่กลุ่มข้อมูลไม่พอ · ไม่ใช่สัดส่วนพื้นที่เผาทั้งตำบล · เพิ่ม CSV ภาพรวมเพื่อแสดงผลระดับพื้นที่")
-    left, right = st.columns([1.2, 1])
-    with left, st.container(border=True):
-        st.subheader("แผนที่พื้นที่ศึกษา"); show_map(f)
-    with right, st.container(border=True):
-        st.subheader("สัญญาณเผา × Access Gap"); show_scatter(f)
-    with st.container(border=True):
-        st.subheader("แปลงที่ควรตรวจสอบเพิ่มเติม")
-        review = f[f["review_flag"]]
-        st.caption(f"{len(review):,} แปลง · รวมสถานะข้อมูลไม่พอ เหตุผลคัดออก หรือธงตรวจสอบจากต้นทาง · ตัวอย่าง 100 แถวแรก")
-        st.dataframe(review[["plot_id", "tambon_name", "display_status", "burn_pct", "valid_observation_pct", "exclusion_reason", "needs_verification"]].head(100), hide_index=True, width="stretch")
+        show_cols = ["plot_id", "tambon_name", "burn_status", "burn_pct", "valid_observation_pct"]
+        st.dataframe(review_df[show_cols].head(50), use_container_width=True, height=280)
+    st.markdown('</div>', unsafe_allow_html=True)
 
+    st.markdown(
+        '<p class="caption-muted">No Burn = ไม่เข้าเกณฑ์ตรวจพบ ไม่ได้ยืนยันว่าไม่เผาหรือไถกลบ</p>',
+        unsafe_allow_html=True,
+    )
+
+# ============================================================
+# PAGE: สำรวจแปลง
+# ============================================================
 elif page == "สำรวจแปลง":
-    st.title("สำรวจแปลงรายพื้นที่")
-    query = st.text_input("ค้นหารหัสแปลง", placeholder="พิมพ์ส่วนหนึ่งของ plot_id")
-    review_only = st.checkbox("แสดงเฉพาะแปลงที่ควรตรวจสอบเพิ่มเติม")
-    explored = f[f["plot_id"].astype(str).str.contains(query, regex=False, case=False)]
-    if review_only: explored = explored[explored["review_flag"]]
-    st.caption(f"พบ {len(explored):,} แปลง · ตารางแสดงไม่เกิน 1,000 แถวแรก")
-    show_map(explored)
-    cols = ["plot_id", "tambon_name", "display_status", "plot_area_rai", "burn_pct", "valid_observation_pct", "distance_to_collection_km", "access_gap_index", "exclusion_reason"]
-    st.dataframe(explored[cols].head(1000), hide_index=True, width="stretch")
-    st.download_button("ดาวน์โหลดผลค้นหาทั้งหมด", csv_bytes(explored[export_cols]), "burnwise_search.csv", "text/csv")
-    if not explored.empty:
-        ids = explored["plot_id"].tolist()[:1000]
-        choice = st.selectbox("ดูรายละเอียดแปลง (จาก 1,000 แถวแรก)", ids)
-        row = explored[explored["plot_id"].eq(choice)].iloc[0]
-        with st.container(border=True):
-            st.subheader(str(choice))
-            st.write(f"**ตำบล:** {row['tambon_name']} · **สถานะ:** {row['display_status']}")
-            st.dataframe(pd.DataFrame({"รายการ": export_cols, "ค่า": ["—" if pd.isna(row[c]) else str(row[c]) for c in export_cols]}), hide_index=True, width="stretch")
+    st.markdown("# สำรวจแปลงและการเข้าถึง")
+    st.markdown(
+        '<p class="caption-muted">ค้นหาแปลง ดูหลักฐาน และแยกพื้นที่รอตรวจสอบก่อนเสนอมาตรการ</p>',
+        unsafe_allow_html=True,
+    )
 
-elif page == "คุณภาพข้อมูล":
-    st.title("คุณภาพข้อมูลและจุดที่ต้องตรวจสอบ")
-    unknown = f[f["display_status"].eq("ข้อมูลไม่เพียงพอ")]
-    a, b, c = st.columns(3)
-    with a: metric("ข้อมูลไม่เพียงพอ", f"{len(unknown):,}", "แปลงที่ยังไม่ควรสรุปสถานะ", "#566370")
-    with b: metric("ไม่มีระยะทางถนน", f"{f['distance_to_collection_km'].isna().sum():,}", "ไม่แทนระยะทางที่หายด้วยศูนย์", ORANGE)
-    with c: metric("ไม่มี Access Gap", f"{f['access_gap_index'].isna().sum():,}", "ตรวจข้อมูลประกอบก่อนจัดลำดับ", RED)
-    left, right = st.columns(2)
-    with left, st.container(border=True):
-        st.subheader("Coverage" if mode == "modern" else "สัดส่วน valid_observation_pct เดิม")
-        valid = f.dropna(subset=["valid_observation_pct"])
-        if valid.empty: st.info("ไม่มีข้อมูล valid_observation_pct")
+    search = st.text_input("ค้นหารหัสแปลง / ชื่อตำบล", "")
+    explore_df = filtered.copy()
+    if search:
+        mask = (explore_df["plot_id"].astype(str).str.contains(search, case=False, na=False) |
+                explore_df["tambon_name"].astype(str).str.contains(search, case=False, na=False))
+        explore_df = explore_df[mask]
+
+    col_map, col_detail = st.columns([1.6, 1])
+
+    with col_map:
+        st.markdown('<div class="bw-card">', unsafe_allow_html=True)
+        st.markdown("#### แผนที่แปลง")
+        map_df = explore_df.dropna(subset=["centroid_lat", "centroid_lon"])
+        MAX_PTS = 6000
+        if len(map_df) > MAX_PTS:
+            st.caption(f"แสดงตัวอย่างสุ่ม {MAX_PTS:,} จุด จาก {len(map_df):,} จุด")
+            map_df = map_df.sample(MAX_PTS, random_state=42)
+        fig_map = px.scatter_mapbox(
+            map_df, lat="centroid_lat", lon="centroid_lon", color="burn_status",
+            color_discrete_map=STATUS_COLORS,
+            hover_data=["plot_id", "tambon_name", "burn_pct"],
+            zoom=10.3, height=520, opacity=0.65,
+        )
+        fig_map.update_layout(
+            mapbox_style="carto-positron", margin=dict(t=0, b=0, l=0, r=0),
+            legend=dict(orientation="h", yanchor="bottom", y=1.0),
+        )
+        st.plotly_chart(fig_map, use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with col_detail:
+        st.markdown('<div class="bw-card">', unsafe_allow_html=True)
+        st.markdown("#### รายละเอียดแปลง")
+        if len(explore_df) > 0:
+            pick = st.selectbox("เลือกแปลง", explore_df["plot_id"].head(500).tolist())
+            row = explore_df[explore_df["plot_id"] == pick].iloc[0]
+            st.markdown(status_pill(row["burn_status"]), unsafe_allow_html=True)
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.metric("สัดส่วนสัญญาณเผาในพื้นที่ที่ประเมินได้", f"{row.get('burn_pct', float('nan')):.1f}%"
+                       if pd.notna(row.get("burn_pct")) else "—")
+            st.metric("ภาพใช้ได้ครอบคลุม", f"{row.get('valid_observation_pct', float('nan')):.1f}%")
+            if pd.notna(row.get("access_gap_index")):
+                st.metric("Access Gap", f"{row['access_gap_index']:.2f} / 1.00")
+            if pd.notna(row.get("distance_to_collection_km")):
+                st.metric("ระยะทางตามกราฟถนน", f"{row['distance_to_collection_km']:.1f} กม.")
+            if pd.notna(row.get("exclusion_reason")):
+                st.markdown(
+                    f'<div class="bw-banner" style="margin-top:0.6rem;">เหตุผลข้อมูลไม่พอ: {row["exclusion_reason"]}</div>',
+                    unsafe_allow_html=True,
+                )
         else:
-            fig = px.histogram(valid, x="valid_observation_pct", nbins=20, color_discrete_sequence=[ORANGE], labels={"valid_observation_pct": "สัดส่วน (%)"})
-            if mode == "modern": fig.add_vline(x=80, line_dash="dash", line_color=RED, annotation_text="เกณฑ์โค้ดหลัก 80%")
-            st.plotly_chart(chart_style(fig), width="stretch")
-        st.caption(f"ไม่มีค่า {f['valid_observation_pct'].isna().sum():,} แปลง" + (" · ในไฟล์เดิมค่านี้อาจเป็นเผา+ไถกลบ ไม่ใช่พื้นที่ที่มีภาพใช้ได้" if mode == "legacy" else " · กราฟไม่เปลี่ยนสถานะที่บันทึกใน CSV"))
-    with right, st.container(border=True):
-        st.subheader("เหตุผลที่ต้องตรวจสอบ")
-        reasons = f.loc[f["review_flag"], "exclusion_reason"].fillna("").astype(str).str.strip().replace("", "ธงตรวจสอบ/สถานะข้อมูลไม่พอ แต่ไม่มีเหตุผลคัดออก")
-        counts = reasons.value_counts().rename_axis("เหตุผล").reset_index(name="จำนวนแปลง")
-        st.dataframe(counts, hide_index=True, width="stretch")
-    st.info("GISTDA เป็นส่วนเปรียบเทียบเพิ่มเติม: เว็บนี้ไม่ต้องรอไฟล์รอยเผา หากช่วงอ้างอิงไม่ครบ ให้เว้นผลประเมินส่วนนั้นไว้")
-    st.markdown("ผล FIRMS ที่เคยทดสอบ 2/2 จุดที่อ่านภาพได้ มีตัวอย่างน้อย และไม่มีตัวอย่างยืนยันไม่เผา จึงยังไม่ใช้สรุปความแม่นยำทั้งโครงการ")
+            st.info("ไม่พบแปลงตามคำค้นหา")
+        st.markdown('</div>', unsafe_allow_html=True)
 
+    st.markdown('<div class="bw-card">', unsafe_allow_html=True)
+    st.markdown("#### รายการแปลง")
+    st.markdown('<p class="caption-muted">ข้อมูลไม่พอจะไม่ถูกจัดเป็นไม่เผา</p>', unsafe_allow_html=True)
+    show_cols = ["plot_id", "tambon_name", "burn_status", "burn_pct", "valid_observation_pct"]
+    st.dataframe(explore_df[show_cols], use_container_width=True, height=380)
+    csv_bytes = explore_df.to_csv(index=False).encode("utf-8-sig")
+    st.download_button("⬇ ดาวน์โหลดตารางที่กรองแล้ว (CSV)", csv_bytes,
+                        file_name="burnwise_filtered_plots.csv", mime="text/csv")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown(
+        '<div class="bw-banner">ก่อนใช้งานจริง: ยืนยันจุดรับซื้อและตรวจแปลงที่ภาพไม่พอ/ข้อมูลขัดกัน</div>',
+        unsafe_allow_html=True,
+    )
+
+# ============================================================
+# PAGE: คุณภาพข้อมูล
+# ============================================================
+elif page == "คุณภาพข้อมูล":
+    st.markdown("# คุณภาพข้อมูล")
+    st.markdown(
+        '<p class="caption-muted">สัดส่วนภาพใช้ได้ และเหตุผลที่แปลงถูกจัดเป็นข้อมูลไม่เพียงพอ '
+        'ก่อนเชื่อผลใดๆ ควรตรวจหน้านี้ก่อน</p>', unsafe_allow_html=True,
+    )
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown('<div class="bw-card">', unsafe_allow_html=True)
+        st.markdown("#### การกระจายตัวของ Coverage (valid_observation_pct)")
+        fig = px.histogram(filtered, x="valid_observation_pct", nbins=40,
+                            color_discrete_sequence=[RED])
+        fig.add_vline(x=80, line_dash="dash", line_color=ORANGE,
+                      annotation_text="เกณฑ์ขั้นต่ำ 80%")
+        fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                           font_family="Noto Sans Thai", margin=dict(t=10, b=10, l=10, r=10), height=340,
+                           xaxis_title="% ภาพใช้ได้", yaxis_title="จำนวนแปลง")
+        st.plotly_chart(fig, use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with c2:
+        st.markdown('<div class="bw-card">', unsafe_allow_html=True)
+        st.markdown("#### เหตุผลที่ถูกจัดเป็นข้อมูลไม่เพียงพอ")
+        reasons = filtered["exclusion_reason"].dropna().value_counts().reset_index()
+        reasons.columns = ["เหตุผล", "จำนวนแปลง"]
+        if reasons.empty:
+            st.info("ไม่มีแปลงที่ถูกติดเหตุผลในตัวกรองปัจจุบัน")
+        else:
+            fig2 = px.bar(reasons, x="จำนวนแปลง", y="เหตุผล", orientation="h",
+                          color_discrete_sequence=[GREY_BORDER])
+            fig2.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                               font_family="Noto Sans Thai", margin=dict(t=10, b=10, l=10, r=10), height=340)
+            st.plotly_chart(fig2, use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="bw-card">', unsafe_allow_html=True)
+    st.markdown("#### การกระจายตัวของ Tier")
+    tier_counts = filtered["burn_tier"].value_counts().reindex(TIER_ORDER).fillna(0).reset_index()
+    tier_counts.columns = ["tier", "count"]
+    fig3 = px.bar(tier_counts, x="tier", y="count", color="tier",
+                  color_discrete_map=TIER_COLORS, category_orders={"tier": TIER_ORDER})
+    fig3.update_layout(showlegend=False, plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                        font_family="Noto Sans Thai", margin=dict(t=10, b=10, l=10, r=10), height=320,
+                        xaxis_title=None, yaxis_title="จำนวนแปลง")
+    st.plotly_chart(fig3, use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# ============================================================
+# PAGE: เกี่ยวกับโครงการ
+# ============================================================
 else:
-    st.title("เกี่ยวกับ BurnWise")
-    with st.container(border=True):
-        st.subheader("ข้อมูลสำหรับสำรวจและช่วยเหลือพื้นที่")
-        st.write("BurnWise รวบรวมสัญญาณจากดาวเทียม ขอบเขตแปลง และการเข้าถึงจุดรวบรวม เพื่อช่วยสำรวจพื้นที่นำร่องอำเภอท่าตะโก")
-        st.write("เว็บนี้อ่านผล CSV ที่คำนวณแล้วจาก notebook ไม่ได้คำนวณ Earth Engine ใหม่ ไม่ได้เปลี่ยน threshold หรือจัดสถานะแปลงใหม่")
-        st.markdown("**แหล่งข้อมูลในกระบวนการ:** Sentinel-2, FIRMS, Fields of The World, ขอบเขต DOPA, โครงข่ายถนน OpenStreetMap และข้อมูลรายได้ระดับตำบลที่ทีมเลือกใช้")
-        st.markdown("**ข้อจำกัด:** สัญญาณเผาไม่ใช่หลักฐานยืนยันรายบุคคล · No Burn ไม่ยืนยันว่าไถกลบ · รายได้ตำบลไม่ใช่รายได้เจ้าของแปลง · Access Gap เป็นดัชนีประกอบการสำรวจ")
-        st.caption("ภาพรวมจำนวนแปลงคำนวณใหม่จากตารางหลัก เพื่อหลีกเลี่ยง Score Panel จากคนละรอบประมวลผล")
+    st.markdown("# เกี่ยวกับ BurnWise")
+    st.markdown('<div class="bw-card">', unsafe_allow_html=True)
+    st.markdown("""
+BurnWise ตรวจสัญญาณการเผาตอซังข้าวระดับแปลง จากภาพถ่ายดาวเทียม Sentinel-2
+เพื่อสนับสนุนการจัดลำดับความช่วยเหลือเกษตรกรในอำเภอท่าตะโก จังหวัดนครสวรรค์
 
-st.divider()
-st.caption("BurnWise · ท่าตะโก · ตรวจสอบข้อมูลและหลักฐานภาคสนามก่อนใช้กำหนดมาตรการ")
+**ขั้นตอนหลัก:** คำนวณ dNBR เทียบภาพก่อน–หลังฤดูเก็บเกี่ยว → หา threshold จากค่าเฉลี่ย dNBR
+ที่จุดความร้อน VIIRS/FIRMS → ตัดขอบเขตแปลงด้วย Fields of The World (FTW) →
+คำนวณ Access Gap จากระยะทางถนนและรายได้ตำบล (จปฐ.)
+    """)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="bw-card">', unsafe_allow_html=True)
+    st.markdown("#### นิยามที่ต้องเข้าใจก่อนอ่านผล")
+    st.markdown("""
+- **No Burn** = ไม่เข้าเกณฑ์ตรวจพบในข้อมูลที่ใช้ **ไม่ได้ยืนยัน**ว่าไม่เคยเผา และไม่ได้ยืนยันว่าไถกลบ
+- **ข้อมูลไม่เพียงพอ** แยกออกจาก No Burn เสมอ — คือแปลงที่ภาพใช้ได้ไม่ถึง 80% ของพื้นที่เกษตร
+- **burn_pct** คือสัดส่วนของ "พื้นที่ภาพใช้ได้" ไม่ใช่สัดส่วนของพื้นที่ทั้งแปลง
+- **Green** = กลุ่มสัญญาณเผาต่ำตามสูตรนี้ ไม่ใช่การรับรองพฤติกรรมดีของเจ้าของแปลง
+- ผลที่แสดงยังไม่ใช่ผลยืนยันการเผาจริง อยู่ระหว่างตรวจกับชุดอ้างอิงอิสระ
+    """)
+    st.markdown('</div>', unsafe_allow_html=True)
