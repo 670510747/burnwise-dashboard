@@ -526,12 +526,25 @@ DATA_DIR = BASE / "data"
 
 
 def find_data_files():
-    """Pick CSVs from data/ by name: *overview* = tambon table, the rest = plots table (preferred names first)."""
-    files = sorted(DATA_DIR.glob("*.csv")) if DATA_DIR.is_dir() else []
-    ov = [f for f in files if "overview" in f.name.lower()]
-    pl = [f for f in files if f not in ov]
-    pl.sort(key=lambda f: (f.name != "burnwise_master_plots.csv", "plots" not in f.name.lower(), f.name))
-    return (pl[0] if pl else None), (ov[0] if ov else None)
+    """Classify CSVs in data/ (and next to app.py) by their header columns, not by file name:
+    plots table = has plot_id + plot_area_rai; tambon overview = has tambon_name + burn_pct (%) and no plot_id."""
+    cands = []
+    for folder in (DATA_DIR, BASE):
+        if folder.is_dir():
+            cands += sorted(folder.glob("*.csv"))
+    plots_f, ov_f = [], []
+    for f in cands:
+        try:
+            cols = {col_key(c) for c in pd.read_csv(f, encoding="utf-8-sig", nrows=0).columns}
+        except Exception:
+            continue
+        if {"plot_id", "plot_area_rai"} <= cols:
+            plots_f.append(f)
+        elif "tambon_name" in cols and col_key("burn_pct (%)") in cols:
+            ov_f.append(f)
+    plots_f.sort(key=lambda f: (f.parent != DATA_DIR, f.name != "burnwise_master_plots.csv", f.name))
+    ov_f.sort(key=lambda f: (f.parent != DATA_DIR, f.name))
+    return (plots_f[0] if plots_f else None), (ov_f[0] if ov_f else None)
 
 
 path, overview_path = find_data_files()
@@ -613,7 +626,7 @@ try:
     elif uploaded is not None:
         raw = read_csv(io.BytesIO(uploaded.getvalue())); source_name = uploaded.name
     elif path is not None:
-        raw = read_csv(path); source_name = f"data/{path.name}"
+        raw = read_csv(path); source_name = path.name
     else:
         plots_status.markdown(status_html("idle", "ยังไม่มีไฟล์ · อัปโหลด หรือใส่ CSV ใน data/ บน GitHub"), unsafe_allow_html=True)
         filters_wait("อัปโหลดข้อมูลรายแปลงก่อน จึงจะใช้ตัวกรองได้")
@@ -628,7 +641,7 @@ try:
     elif uploaded is not None:
         plots_status.markdown(status_html("ok", f"โหลดแล้ว · {len(plots):,} แถว", uploaded.name), unsafe_allow_html=True)
     else:
-        plots_status.markdown(status_html("ok", f"ใช้ไฟล์ในโฟลเดอร์ data/ · {len(plots):,} แถว", path.name), unsafe_allow_html=True)
+        plots_status.markdown(status_html("ok", f"ใช้ไฟล์ในโฟลเดอร์โปรเจกต์ · {len(plots):,} แถว", path.name), unsafe_allow_html=True)
 except StatusError as exc:
     plots_status.markdown(status_html("warn", "อ่านไฟล์ไม่สำเร็จ · ตรวจค่า burn_status"), unsafe_allow_html=True)
     filters_wait("แก้ไฟล์ให้ผ่านก่อน จึงจะใช้ตัวกรองได้")
