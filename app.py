@@ -7,6 +7,8 @@ Brand red is decoration (logo, menu, buttons, key numbers). Data status colours
 from pathlib import Path
 from html import escape
 import io
+import re
+import unicodedata
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -57,7 +59,10 @@ box-shadow:0 14px 30px -18px rgba(78,128,152,.38),0 3px 8px rgba(90,100,120,.08)
 [data-testid="stSidebar"] [data-testid="stCaptionContainer"]{line-height:1.5;}
 /* ── cards (plain keyed containers; no thin default border) ── */
 [class*="st-key-card-"]{background:var(--bg);border:1px solid rgba(206,211,220,.55);border-radius:26px;padding:22px 24px;box-shadow:var(--raise);box-sizing:border-box;min-width:0;}
-[data-testid="stHorizontalBlock"]{align-items:stretch!important;gap:18px!important;}
+[data-testid="stHorizontalBlock"]{align-items:stretch!important;gap:28px!important;}
+[data-testid="stHorizontalBlock"]:has(>[data-testid="stColumn"]:nth-child(2):last-child){gap:32px!important;}
+.block-container>[data-testid="stVerticalBlock"],[data-testid="stMainBlockContainer"]>[data-testid="stVerticalBlock"]{gap:28px;}
+.st-key-page-top{gap:16px;}
 [data-testid="stColumn"]{min-width:0;}
 [data-testid="stColumn"]>[data-testid="stVerticalBlock"]{flex:1 1 auto;}
 [data-testid="stColumn"]>[data-testid="stVerticalBlock"]>*:only-child{flex:1 1 auto;display:flex;flex-direction:column;}
@@ -80,8 +85,13 @@ box-shadow:0 14px 30px -18px rgba(78,128,152,.38),0 3px 8px rgba(90,100,120,.08)
 /* capsule menu: each item is its own capsule, radio circle removed */
 .st-key-topbar [data-testid="stRadio"] [role="radiogroup"]{background:none;box-shadow:none;padding:5px 3px;gap:6px;flex-wrap:nowrap;width:fit-content;max-width:100%;overflow-x:auto;scrollbar-width:none;}
 .st-key-topbar [data-testid="stRadio"] [role="radiogroup"]::-webkit-scrollbar{display:none;}
-.st-key-topbar [data-testid="stRadio"] label>*:not(input):not(:has([data-testid="stMarkdownContainer"])):not([data-testid="stMarkdownContainer"]){display:none!important;}
-.st-key-topbar [data-testid="stRadio"] label{margin:0!important;padding:7px 14px;border-radius:999px;background:var(--bg);border:1px solid rgba(206,211,220,.85);box-shadow:var(--raise-s);cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:6px;flex:none;transition:background .15s;}
+.st-key-topbar [data-testid="stWidgetLabel"]{display:none!important;}
+.st-key-topbar [data-testid="stRadio"]{margin:0;padding:0;}
+.st-key-topbar [data-testid="stMarkdown"],.st-key-topbar [data-testid="stMarkdownContainer"]{margin:0!important;}
+.st-key-topbar [data-testid="stVerticalBlock"]{gap:0;}
+.st-key-topbar [data-testid="stRadio"] label input{position:absolute!important;opacity:0!important;width:1px!important;height:1px!important;margin:0!important;pointer-events:none;}
+.st-key-topbar [data-testid="stRadio"] label *:not(input):not(:has([data-testid="stMarkdownContainer"])):not([data-testid="stMarkdownContainer"]):not([data-testid="stMarkdownContainer"] *){display:none!important;}
+.st-key-topbar [data-testid="stRadio"] label{position:relative;margin:0!important;padding:7px 14px;border-radius:999px;background:var(--bg);border:1px solid rgba(206,211,220,.85);box-shadow:var(--raise-s);cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:6px;flex:none;transition:background .15s;}
 .st-key-topbar [data-testid="stRadio"] label p{font-size:14px;font-weight:600;color:var(--ink);margin:0;white-space:nowrap;line-height:1.4;}
 .st-key-topbar [data-testid="stRadio"] label:hover{background:#F2ECEF;}
 .st-key-topbar [data-testid="stRadio"] label:has(input:checked){background:var(--brand);border-color:var(--brand);box-shadow:0 3px 8px rgba(163,22,33,.24);}
@@ -152,7 +162,8 @@ button:focus-visible{outline:3px solid rgba(144,194,231,.95)!important;outline-o
 @media(max-width:800px){.block-container,[data-testid="stMainBlockContainer"]{width:calc(100% - 16px);margin:52px auto 20px!important;padding:14px 12px 18px!important;border-radius:24px;}
 [data-testid="stSidebar"]{padding:12px;}
 .st-key-topbar{padding:8px 10px;border-radius:22px;}
-[data-testid="stHorizontalBlock"]{gap:14px!important;}
+[data-testid="stHorizontalBlock"],[data-testid="stHorizontalBlock"]:has(>[data-testid="stColumn"]:nth-child(2):last-child){gap:16px!important;}
+.block-container>[data-testid="stVerticalBlock"],[data-testid="stMainBlockContainer"]>[data-testid="stVerticalBlock"]{gap:20px;}
 [class*="st-key-card-"]{padding:16px;border-radius:22px;}
 .h-page{font-size:1.3rem;}.metric{min-height:112px;padding:15px;}.metric .m-value{font-size:28px;}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;}}
@@ -199,15 +210,89 @@ def strip(text):
 
 
 # ── data helpers (unchanged logic) ───────────────────────────────────────────
+# ── cleaning + status normalisation ──────────────────────────────────────────
+KNOWN_COLUMNS = ["plot_id", "tambon_id", "tambon_name", "plot_area_rai", "burn_pct", "burn_status", "burn_status_original", "tier",
+                 "valid_observation_pct", "unknown_pct", "distance_to_collection_km", "access_gap_index", "centroid_lat",
+                 "centroid_lon", "tambon_income_baht_year", "exclusion_reason", "priority_group", "needs_verification"]
+_INVISIBLE = re.compile("[\u200b\u200c\u200d\u2060\ufeff]")
+
+
+def clean_text(value):
+    """NFC, drop BOM / zero-width characters, NBSP -> space, collapse whitespace, trim."""
+    text = unicodedata.normalize("NFC", str(value))
+    text = _INVISIBLE.sub("", text).replace("\u00a0", " ")
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def col_key(name):
+    return re.sub(r"[\s\-]+", "_", clean_text(name)).lower()
+
+
+def status_key(value):
+    """Comparison key: cleaned, case-folded, no spaces / underscores / hyphens."""
+    return re.sub(r"[\s_\-]+", "", clean_text(value)).casefold()
+
+
+# Only equivalences that are certain: the three canonical codes and their Thai display names used by this app.
+STATUS_ALIASES = {status_key(k): v for k, v in {
+    "Burn": "Burn", "ตรวจพบสัญญาณเผา": "Burn",
+    "No Burn": "No Burn", "ไม่เข้าเกณฑ์ตรวจพบ": "No Burn",
+    "Unknown": "Unknown", "ข้อมูลไม่เพียงพอ": "Unknown"}.items()}
+
+
+class StatusError(ValueError):
+    """Unrecognised burn_status values: carries a per-value summary and sample rows for the UI."""
+    def __init__(self, message, summary, samples):
+        super().__init__(message)
+        self.summary, self.samples = summary, samples
+
+
+def status_summary(raw):
+    """One row per distinct raw value: repr (shows hidden characters), cleaned text, mapped status, row count."""
+    shown = raw.astype("string")
+    rows = []
+    for value, n in shown.value_counts(dropna=False).items():
+        missing = pd.isna(value) or clean_text(value) == ""
+        mapped = None if missing else STATUS_ALIASES.get(status_key(value))
+        rows.append({"ค่าดิบในไฟล์ (repr)": "<ว่าง>" if pd.isna(value) else repr(str(value)), "หลังทำความสะอาด": "(ว่าง)" if missing else clean_text(value),
+                     "แปลงเป็น": mapped if mapped else "ไม่รู้จัก — ไม่แปลงให้", "จำนวนแถว": int(n)})
+    return pd.DataFrame(rows).sort_values("จำนวนแถว", ascending=False, ignore_index=True)
+
+
+def normalize_status(frame):
+    raw = frame["burn_status"]
+    summary = status_summary(raw)
+    shown = raw.astype("string")
+    mapped = shown.map(lambda v: None if pd.isna(v) or clean_text(v) == "" else STATUS_ALIASES.get(status_key(v)))
+    bad = mapped.isna()
+    if bad.any():
+        samples_cols = [c for c in ["plot_id", "tambon_name", "burn_status", "burn_pct"] if c in frame]
+        samples = frame.loc[bad, samples_cols].rename(columns={"burn_status": "burn_status (ค่าดิบ)"}).head(20)
+        values = summary[summary["แปลงเป็น"].str.startswith("ไม่รู้จัก")]
+        names = ", ".join(f"{r['หลังทำความสะอาด']} ({r['จำนวนแถว']:,} แถว)" for _, r in values.iterrows())
+        raise StatusError(f"burn_status มีค่าที่ไม่รู้จัก {int(bad.sum()):,} แถว: {names} · เว็บไม่แปลงเป็น No Burn หรือ Unknown ให้เอง", summary, samples)
+    if "burn_status_original" not in frame:
+        frame["burn_status_original"] = raw
+    frame["burn_status"] = mapped.astype(object)
+    return frame, summary
+
+
 def read_csv(source):
-    """Keep leading zeroes in IDs and report empty/broken files cleanly."""
+    """Read a CSV; clean header names (BOM, spaces, case of known names) and keep leading zeroes in IDs."""
     try:
-        frame = pd.read_csv(source, encoding="utf-8-sig", dtype={"plot_id": "string", "tambon_id": "string"})
+        header = pd.read_csv(source, encoding="utf-8-sig", nrows=0)
+        if hasattr(source, "seek"):
+            source.seek(0)
+        id_cols = [c for c in header.columns if col_key(c) in ("plot_id", "tambon_id")]
+        frame = pd.read_csv(source, encoding="utf-8-sig", dtype={c: "string" for c in id_cols})
     except pd.errors.EmptyDataError:
         raise ValueError("CSV ว่าง: ส่งออกไฟล์จาก notebook ใหม่ก่อนนำมาใช้") from None
     except (UnicodeDecodeError, pd.errors.ParserError):
         raise ValueError("อ่าน CSV ไม่ได้ กรุณาส่งออกเป็น UTF-8 CSV จาก notebook") from None
-    frame.columns = frame.columns.astype(str).str.strip()
+    known = {col_key(k): k for k in KNOWN_COLUMNS}
+    frame.columns = [known.get(col_key(c), clean_text(c)) for c in frame.columns]
+    if frame.columns.duplicated().any():
+        raise ValueError("ชื่อคอลัมน์ซ้ำหลังทำความสะอาด: " + ", ".join(sorted(set(frame.columns[frame.columns.duplicated()]))))
     if frame.empty:
         raise ValueError("CSV มีเฉพาะหัวตาราง แต่ยังไม่มีข้อมูลแปลง")
     return frame
@@ -215,14 +300,17 @@ def read_csv(source):
 
 def prepare(frame):
     frame = frame.copy()
+    summary = None
     required = {"plot_id", "tambon_name", "plot_area_rai", "burn_pct"}
     missing = required - set(frame)
     if missing:
         raise ValueError("CSV ขาดคอลัมน์: " + ", ".join(sorted(missing)))
+    frame["plot_id"] = frame["plot_id"].astype("string").str.strip()
     if frame["plot_id"].isna().any() or frame["plot_id"].astype(str).str.strip().eq("").any() or frame["plot_id"].duplicated().any():
         raise ValueError("plot_id ต้องมีค่าครบและไม่ซ้ำ กรุณาตรวจไฟล์ต้นทาง")
     if frame["tambon_name"].isna().any():
         raise ValueError("พบแปลงไม่มีชื่อตำบล กรุณาตรวจการเชื่อมข้อมูลต้นทาง")
+    frame["tambon_name"] = frame["tambon_name"].astype(str).str.strip()
     numeric = ["plot_area_rai", "burn_pct", "valid_observation_pct", "unknown_pct", "distance_to_collection_km", "access_gap_index", "centroid_lat", "centroid_lon", "tambon_income_baht_year"]
     for col in numeric:
         if col not in frame:
@@ -237,24 +325,25 @@ def prepare(frame):
     if (frame["plot_area_rai"] < 0).any() or frame["plot_area_rai"].isna().any() or (frame["distance_to_collection_km"] < 0).any():
         raise ValueError("พื้นที่แปลงต้องมีค่าครบ และพื้นที่/ระยะทางต้องไม่ติดลบ")
     if "burn_status" in frame:
-        if not frame["burn_status"].isin(STATUS).all():
-            raise ValueError("burn_status ต้องเป็น Burn, No Burn หรือ Unknown เท่านั้น")
+        frame, summary = normalize_status(frame)
         mode = "modern"
         frame["display_status"] = frame["burn_status"].map(STATUS)
     elif "tier" in frame:
+        frame["tier"] = frame["tier"].map(lambda v: v if pd.isna(v) else clean_text(v))
         if not frame["tier"].isin(["เขียว", "เหลือง", "แดง", "ข้อมูลไม่เพียงพอ"]).all():
             raise ValueError("tier มีค่าที่ไม่รู้จัก กรุณาตรวจ CSV")
         mode = "legacy"
         frame["display_status"] = frame["tier"].map({"เขียว": "Tier เขียว (เดิม)", "เหลือง": "Tier เหลือง (เดิม)", "แดง": "Tier แดง (เดิม)", "ข้อมูลไม่เพียงพอ": "ข้อมูลไม่เพียงพอ"})
     else:
-        raise ValueError("ต้องมี burn_status จากโค้ดล่าสุด หรือ tier จากไฟล์เดิม เว็บจะไม่เดาสถานะเอง")
+        related = [c for c in frame.columns if re.search(r"status|class|label|tier|burn|สถานะ", c, re.I)]
+        raise ValueError("ไม่พบคอลัมน์ burn_status หรือ tier · คอลัมน์ที่อาจเกี่ยวกับสถานะ: " + (", ".join(related) or "ไม่มี") + " · คอลัมน์ทั้งหมด: " + ", ".join(map(str, frame.columns)) + " · เว็บไม่สร้างสถานะจาก burn_pct/coverage เอง เพราะต้องใช้เกณฑ์เดียวกับ notebook ให้ส่งออกคอลัมน์ burn_status จาก notebook")
     for col in ["exclusion_reason", "priority_group", "needs_verification"]:
         if col not in frame:
             frame[col] = ""
     values = frame["needs_verification"].fillna("").astype(str).str.strip()
     frame["review_flag"] = ~values.str.lower().isin(["", "false", "0", "0.0", "none", "nan"])
     frame["review_flag"] |= frame["display_status"].eq("ข้อมูลไม่เพียงพอ") | frame["exclusion_reason"].fillna("").astype(str).str.strip().ne("")
-    return frame, mode
+    return frame, mode, summary
 
 
 def chart_style(fig, height=350):
@@ -340,18 +429,23 @@ with data_box:
     st.caption("ใส่ CSV ใน data/ บน GitHub หรืออัปโหลดเพื่อดูในเซสชันนี้")
     uploaded = st.file_uploader("ตารางแปลง burnwise_master_plots.csv", type=["csv"], key="plots_upload")
     optional_overview = st.file_uploader("ภาพรวมตำบล (ไม่จำเป็น)", type=["csv"], key="overview_upload")
-    demo = st.toggle("ทดลองหน้าตาด้วยข้อมูลจำลอง", key="demo_mode")
+    demo_toggle = st.toggle("ทดลองหน้าตาด้วยข้อมูลจำลอง", key="demo_mode")
+    demo = demo_toggle and uploaded is None  # an uploaded CSV always wins over demo data
+    if demo_toggle and uploaded is not None:
+        st.caption("มีไฟล์ที่อัปโหลดอยู่ จึงใช้ไฟล์จริงแทนข้อมูลจำลอง")
     period = st.text_input("ช่วงศึกษาที่ระบุใน notebook", placeholder="เช่น พ.ย. 2568 – ม.ค. 2569")
     st.caption("ชื่อช่วงศึกษาใช้แสดงประกอบเท่านั้น ไม่ได้กรองวันที่ใน CSV")
 
 # ── top bar: logo + capsule menu + download slot ─────────────────────────────
-with st.container(key="topbar"):
-    c_brand, c_nav, c_dl = st.columns([1.15, 2.7, 1.2], vertical_alignment="center")
-    badge = '<span class="demo-badge">ข้อมูลจำลอง</span>' if demo else ""
-    c_brand.markdown(f'<div class="brand"><span class="logo"></span><div><div class="b-name">BurnWise{badge}</div><div class="b-sub">อำเภอท่าตะโก · Field Insights</div></div></div>', unsafe_allow_html=True)
-    with c_nav:
-        page = st.radio("หน้าเว็บ", PAGES, horizontal=True, label_visibility="collapsed", format_func=lambda p: f":material/{PAGE_ICON[p]}: {p}")
-    dl_slot = c_dl.empty()
+top = st.container(key="page-top")
+with top:
+    with st.container(key="topbar"):
+        c_brand, c_nav, c_dl = st.columns([1.15, 2.7, 1.2], vertical_alignment="center")
+        badge = '<span class="demo-badge">ข้อมูลจำลอง</span>' if demo else ""
+        c_brand.markdown(f'<div class="brand"><span class="logo"></span><div><div class="b-name">BurnWise{badge}</div><div class="b-sub">อำเภอท่าตะโก · Field Insights</div></div></div>', unsafe_allow_html=True)
+        with c_nav:
+            page = st.radio("หน้าเว็บ", PAGES, horizontal=True, label_visibility="collapsed", format_func=lambda p: f":material/{PAGE_ICON[p]}: {p}")
+        dl_slot = c_dl.empty()
 
 path = BASE / "data" / "burnwise_master_plots.csv"
 try:
@@ -367,7 +461,16 @@ try:
             st.markdown('<ol class="steps"><li>อัปโหลด <b>burnwise_master_plots.csv</b> ทางแถบด้านซ้าย</li><li>หรือเพิ่มไฟล์นี้ในโฟลเดอร์ <b>data</b> ของ GitHub</li><li>หรือดูหน้าตาเว็บก่อนด้วยข้อมูลจำลอง (ไม่ใช่ผลของโครงการ)</li></ol>', unsafe_allow_html=True)
             st.button(":material/science: ทดลองด้วยข้อมูลจำลอง", type="primary", on_click=start_demo)
         st.stop()
-    plots, mode = prepare(raw)
+    plots, mode, status_table = prepare(raw)
+except StatusError as exc:
+    st.error(str(exc))
+    with card("status-diag"):
+        head("ค่าใน burn_status ที่พบในไฟล์", "รายการค่าที่ไม่ซ้ำพร้อมจำนวนแถว · ค่าที่ไม่รู้จักถูกหยุดไว้ ไม่ถูกแปลงเป็นสถานะอื่น")
+        st.dataframe(exc.summary, hide_index=True, width="stretch")
+        head("ตัวอย่างแถวที่มีปัญหา (สูงสุด 20 แถว)")
+        st.dataframe(exc.samples, hide_index=True, width="stretch")
+        st.caption("ถ้าค่าเหล่านี้มีความหมายตรงกับ Burn / No Burn / Unknown ให้แก้ที่ notebook หรือแจ้งชื่อค่า เพื่อเพิ่ม mapping ใน STATUS_ALIASES")
+    st.stop()
 except (ValueError, OSError) as exc:
     st.error(str(exc)); st.stop()
 
@@ -390,13 +493,19 @@ with legend_box:
     st.markdown('<div class="legend-note">สีแดงเข้มของโลโก้ เมนู และปุ่มเป็นสีแบรนด์ ไม่ใช่การแจ้งเตือนการเผา สถานะข้อมูลแสดงด้วยป้ายพร้อมไอคอนข้างต้นเสมอ</div>', unsafe_allow_html=True)
 
 # ── notices ──────────────────────────────────────────────────────────────────
-if demo:
-    st.warning("ข้อมูลจำลองทั้งหมด: ใช้ตรวจหน้าตาเว็บเท่านั้น ตัวเลขและพิกัดไม่ใช่ผลของโครงการ")
-elif mode == "legacy":
-    st.warning("ไฟล์นี้ใช้ Tier เดิมจากสัดส่วนไถกลบ: แสดงกลุ่มตามต้นทาง ไม่แปลงเป็น Burn / No Burn · valid_observation_pct เดิมอาจเป็นผลรวมเผา+ไถกลบ จึงยังใช้ยืนยัน coverage ไม่ได้")
-else:
-    strip("ผลจากดาวเทียมเบื้องต้น · No Burn = ไม่เข้าเกณฑ์ตรวจพบ ไม่ใช่หลักฐานยืนยันว่าไม่เผาหรือไถกลบ")
-st.markdown(f'<div class="chips"><span class="chip">แหล่งข้อมูล: {escape(source_name)}</span><span class="chip">{("ช่วงศึกษา: " + escape(period)) if period else "ยังไม่ได้ระบุช่วงศึกษา"}</span></div>', unsafe_allow_html=True)
+with top:
+    if demo:
+        st.warning("ข้อมูลจำลองทั้งหมด: ใช้ตรวจหน้าตาเว็บเท่านั้น ตัวเลขและพิกัดไม่ใช่ผลของโครงการ")
+    elif mode == "legacy":
+        st.warning("ไฟล์นี้ใช้ Tier เดิมจากสัดส่วนไถกลบ: แสดงกลุ่มตามต้นทาง ไม่แปลงเป็น Burn / No Burn · valid_observation_pct เดิมอาจเป็นผลรวมเผา+ไถกลบ จึงยังใช้ยืนยัน coverage ไม่ได้")
+    else:
+        strip("ผลจากดาวเทียมเบื้องต้น · No Burn = ไม่เข้าเกณฑ์ตรวจพบ ไม่ใช่หลักฐานยืนยันว่าไม่เผาหรือไถกลบ")
+    rows_chip = f"{'ข้อมูลจำลอง' if demo else 'โหลดแล้ว'} {len(plots):,} แถว"
+    st.markdown(f'<div class="chips"><span class="chip">{rows_chip}</span><span class="chip">แหล่งข้อมูล: {escape(source_name)}</span><span class="chip">{("ช่วงศึกษา: " + escape(period)) if period else "ยังไม่ได้ระบุช่วงศึกษา"}</span></div>', unsafe_allow_html=True)
+if status_table is not None and not demo:
+    with st.expander(f"ตรวจค่า burn_status จากไฟล์ ({len(plots):,} แถว)"):
+        st.caption("ค่าดิบทุกค่าในไฟล์ พร้อมสถานะมาตรฐานที่เว็บใช้ · ค่าดิบเก็บไว้ในคอลัมน์ burn_status_original")
+        st.dataframe(status_table, hide_index=True, width="stretch")
 
 f = plots[plots["tambon_name"].isin(selected_names) & plots["display_status"].isin(selected_status)].copy()
 if f.empty:
@@ -437,7 +546,10 @@ if page == "ภาพรวม":
                 overview["burn_pct (%)"] = pd.to_numeric(overview["burn_pct (%)"], errors="raise")
                 if not overview["burn_pct (%)"].dropna().between(0, 100).all():
                     raise ValueError("burn_pct (%) ต้องอยู่ในช่วง 0–100")
+                overview["tambon_name"] = overview["tambon_name"].astype(str).str.strip()
                 overview = overview[overview["tambon_name"].isin(selected_names)].dropna(subset=["burn_pct (%)"])
+                if overview.empty:
+                    st.warning("ภาพรวมตำบลไม่มีตำบลที่ตรงกับไฟล์รายแปลงหรือตัวกรอง จึงสรุปจากข้อมูลรายแปลงแทน")
             except (ValueError, OSError) as exc:
                 st.warning(f"ไม่แสดงภาพรวมตำบล: {exc}"); overview = None
         if overview is not None and not overview.empty:
