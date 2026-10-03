@@ -522,7 +522,21 @@ def demo_data():
     return pd.DataFrame({"plot_id": [f"DEMO-{i:04}" for i in range(n)], "tambon_name": rng.choice(["ต.ท่าตะโก", "ต.ดอนคา", "ต.ทำนบ", "ต.พนมรอก"], n), "plot_area_rai": rng.uniform(.5, 20, n), "burn_status": status, "burn_pct": burn, "valid_observation_pct": np.where(status == "Unknown", rng.uniform(10, 70, n), rng.uniform(80, 100, n)), "centroid_lat": rng.uniform(15.5, 15.8, n), "centroid_lon": rng.uniform(100.3, 100.6, n), "access_gap_index": rng.uniform(0, 1, n), "distance_to_collection_km": rng.uniform(0, 25, n), "exclusion_reason": np.where(status == "Unknown", "ข้อมูลจำลอง: coverage ไม่พอ", ""), "needs_verification": status == "Unknown"})
 
 
-st.session_state.setdefault("demo_mode", False)
+DATA_DIR = BASE / "data"
+
+
+def find_data_files():
+    """Pick CSVs from data/ by name: *overview* = tambon table, the rest = plots table (preferred names first)."""
+    files = sorted(DATA_DIR.glob("*.csv")) if DATA_DIR.is_dir() else []
+    ov = [f for f in files if "overview" in f.name.lower()]
+    pl = [f for f in files if f not in ov]
+    pl.sort(key=lambda f: (f.name != "burnwise_master_plots.csv", "plots" not in f.name.lower(), f.name))
+    return (pl[0] if pl else None), (ov[0] if ov else None)
+
+
+path, overview_path = find_data_files()
+# no data file in the repo -> open straight into demo mode (clearly labelled); a real file always wins
+st.session_state.setdefault("demo_mode", path is None)
 
 
 def start_demo():
@@ -534,14 +548,12 @@ with st.sidebar:
     filter_box = st.container(key="side-filters")
     data_box = st.container(key="side-upload")
 
-overview_path = BASE / "data" / "burnwise_tambon_overview.csv"
-
 
 def overview_state(file):
     """Light check of the optional tambon file for the sidebar status line (page logic below is unchanged)."""
     if file is None:
-        if overview_path.is_file():
-            return "ok", "ใช้ไฟล์ในโฟลเดอร์ data/", "burnwise_tambon_overview.csv"
+        if overview_path is not None:
+            return "ok", "ใช้ไฟล์ในโฟลเดอร์ data/", overview_path.name
         return "idle", "ไม่จำเป็น · ถ้าไม่ใส่ จะสรุปจากข้อมูลรายแปลง", None
     try:
         ov = read_csv(io.BytesIO(file.getvalue()))
@@ -553,21 +565,25 @@ def overview_state(file):
 
 
 with data_box:
-    side_head("upload", "อัปโหลดข้อมูล", "อัปโหลดข้อมูลเพื่อการวิเคราะห์")
-    with st.container(key="fg-plots"):
+    side_head("upload", "ข้อมูล", "ใช้ไฟล์ใน data/ อัตโนมัติ หรืออัปโหลดเพื่อทดลองชั่วคราว" if path else "อัปโหลดข้อมูลเพื่อการวิเคราะห์")
+    _up = st.expander("อัปโหลดไฟล์อื่นชั่วคราว", expanded=False) if path else st.container()
+    with _up, st.container(key="fg-plots"):
         field_label("ข้อมูลรายแปลง")
         uploaded = st.file_uploader("ตารางแปลง burnwise_master_plots.csv", type=["csv"], key="plots_upload", label_visibility="collapsed")
         plots_status = st.empty()
-    with st.container(key="fg-overview"):
+    with _up, st.container(key="fg-overview"):
         field_label("ภาพรวมตำบล", "(ไม่จำเป็น)")
         optional_overview = st.file_uploader("ภาพรวมตำบล (ไม่จำเป็น)", type=["csv"], key="overview_upload", label_visibility="collapsed")
         ov_kind, ov_text, ov_detail = overview_state(optional_overview)
         st.markdown(status_html(ov_kind, ov_text, ov_detail), unsafe_allow_html=True)
     with st.container(key="fg-extra"):
-        demo_toggle = st.toggle("ทดลองหน้าตาด้วยข้อมูลจำลอง", key="demo_mode")
-        demo = demo_toggle and uploaded is None  # an uploaded CSV always wins over demo data
-        if demo_toggle and uploaded is not None:
-            st.caption("มีไฟล์ที่อัปโหลดอยู่ จึงใช้ไฟล์จริงแทนข้อมูลจำลอง")
+        if path is None:
+            demo_toggle = st.toggle("ทดลองหน้าตาด้วยข้อมูลจำลอง", key="demo_mode")
+            demo = demo_toggle and uploaded is None  # an uploaded CSV always wins over demo data
+            if demo_toggle and uploaded is not None:
+                st.caption("มีไฟล์ที่อัปโหลดอยู่ จึงใช้ไฟล์จริงแทนข้อมูลจำลอง")
+        else:
+            demo = False  # real file in data/ -> never fall back to demo data
         field_label("ช่วงศึกษาที่ระบุใน notebook")
         period = st.text_input("ช่วงศึกษาที่ระบุใน notebook", placeholder="เช่น พ.ย. 2568 – ม.ค. 2569", label_visibility="collapsed")
         st.caption("ชื่อช่วงศึกษาใช้แสดงประกอบเท่านั้น ไม่ได้กรองวันที่ใน CSV")
@@ -591,14 +607,13 @@ with top:
             page = st.radio("หน้าเว็บ", PAGES, horizontal=True, label_visibility="collapsed", format_func=lambda p: f":material/{PAGE_ICON[p]}: {p}")
         dl_slot = c_dl.empty()
 
-path = BASE / "data" / "burnwise_master_plots.csv"
 try:
     if demo:
         raw = demo_data(); source_name = "ข้อมูลจำลอง"
     elif uploaded is not None:
         raw = read_csv(io.BytesIO(uploaded.getvalue())); source_name = uploaded.name
-    elif path.is_file():
-        raw = read_csv(path); source_name = "data/burnwise_master_plots.csv"
+    elif path is not None:
+        raw = read_csv(path); source_name = f"data/{path.name}"
     else:
         plots_status.markdown(status_html("idle", "ยังไม่มีไฟล์ · อัปโหลด หรือใส่ CSV ใน data/ บน GitHub"), unsafe_allow_html=True)
         filters_wait("อัปโหลดข้อมูลรายแปลงก่อน จึงจะใช้ตัวกรองได้")
@@ -613,7 +628,7 @@ try:
     elif uploaded is not None:
         plots_status.markdown(status_html("ok", f"โหลดแล้ว · {len(plots):,} แถว", uploaded.name), unsafe_allow_html=True)
     else:
-        plots_status.markdown(status_html("ok", f"ใช้ไฟล์ในโฟลเดอร์ data/ · {len(plots):,} แถว", "burnwise_master_plots.csv"), unsafe_allow_html=True)
+        plots_status.markdown(status_html("ok", f"ใช้ไฟล์ในโฟลเดอร์ data/ · {len(plots):,} แถว", path.name), unsafe_allow_html=True)
 except StatusError as exc:
     plots_status.markdown(status_html("warn", "อ่านไฟล์ไม่สำเร็จ · ตรวจค่า burn_status"), unsafe_allow_html=True)
     filters_wait("แก้ไฟล์ให้ผ่านก่อน จึงจะใช้ตัวกรองได้")
@@ -716,7 +731,7 @@ if page == "ภาพรวม":
     with right, card("tambon-burn"):
         head("สัดส่วนสัญญาณเผารายตำบล")
         overview = None
-        if not demo and (optional_overview is not None or overview_path.is_file()):
+        if not demo and (optional_overview is not None or overview_path is not None):
             try:
                 overview = read_csv(io.BytesIO(optional_overview.getvalue()) if optional_overview else overview_path)
                 if not {"tambon_name", "burn_pct (%)"}.issubset(overview):
