@@ -18,8 +18,8 @@ BASE = Path(__file__).resolve().parent
 # ── Brand palette (decoration) ───────────────────────────────────────────────
 BG, LINE, BRAND, SEC, SKY = "#FCF7F8", "#CED3DC", "#A31621", "#4E8098", "#90C2E7"
 INK, MUTED = "#26303B", "#5B6675"
-# ── Data-status colours (meaning), kept apart from the brand red ─────────────
-S_RED, S_GREEN, S_AMBER, S_GREY = "#E04448", "#22875A", "#E3A008", "#8E99A8"
+# ── Data-status colours: burn signal uses the brand red; meaning is always carried by icon + text ──
+S_RED, S_GREEN, S_AMBER, S_GREY = BRAND, "#4B8F6D", "#D8A94A", "#9AA5B4"
 FONT_PLOT = "Noto Sans Thai, Sarabun, sans-serif"
 
 STATUS = {"Burn": "ตรวจพบสัญญาณเผา", "No Burn": "ไม่เข้าเกณฑ์ตรวจพบ", "Unknown": "ข้อมูลไม่เพียงพอ"}
@@ -31,111 +31,130 @@ PAGE_ICON = {"ภาพรวม": "space_dashboard", "สำรวจแปล�
 CSS = '''<style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&display=swap');
 :root{color-scheme:light;--bg:#FCF7F8;--line:#CED3DC;--brand:#A31621;--brand-d:#85101A;--sec:#4E8098;--sky:#90C2E7;--ink:#26303B;--muted:#5B6675;
---raise:8px 8px 20px rgba(120,132,150,.24),-6px -6px 16px rgba(255,255,255,.95);
---raise-s:5px 5px 12px rgba(120,132,150,.20),-4px -4px 10px rgba(255,255,255,.95);
---inset:inset 3px 3px 7px rgba(120,132,150,.20),inset -3px -3px 7px rgba(255,255,255,.95);}
-/* fonts: set on text elements only, so Material icon fonts keep working */
+--raise:4px 5px 12px rgba(120,132,150,.20),-4px -4px 10px rgba(255,255,255,.92);
+--raise-s:3px 3px 8px rgba(120,132,150,.17),-3px -3px 7px rgba(255,255,255,.92);
+--inset:inset 2px 2px 5px rgba(120,132,150,.18),inset -2px -2px 5px rgba(255,255,255,.92);}
+/* fonts: text elements only, so Material icon fonts keep working */
 .stApp,.stApp p,.stApp label,.stApp li,.stApp td,.stApp th,.stApp h1,.stApp h2,.stApp h3,.stApp h4,.stApp button,.stApp input,.stApp textarea,.stApp [data-baseweb]{font-family:'Noto Sans Thai','Sarabun',sans-serif;}
 .stApp{background:linear-gradient(160deg,#DDE1E8 0%,#CED3DC 55%,#C5CBD6 100%);color:var(--ink);line-height:1.55;}
+html,body,[data-testid="stAppViewContainer"],[data-testid="stMain"]{overflow-x:hidden;}
 [data-testid="stElementContainer"]:has(style),.element-container:has(style){display:none;}
 [data-testid="stHeader"]{background:transparent;}
 /* ── floating main panel ── */
-.block-container,[data-testid="stMainBlockContainer"]{max-width:1380px!important;width:calc(100% - 32px);margin:60px auto 36px!important;padding:28px 30px 30px!important;
-background:linear-gradient(145deg,#F7F2F4,#EFE9EC);border:2px solid rgba(255,255,255,.95);border-radius:34px;
-box-shadow:0 30px 60px -22px rgba(78,128,152,.35),0 10px 24px rgba(90,100,120,.16);}
+.block-container,[data-testid="stMainBlockContainer"]{max-width:1380px!important;width:calc(100% - 32px);margin:56px auto 32px!important;padding:24px 26px 26px!important;
+background:linear-gradient(145deg,#F7F2F4,#EFE9EC);border:2px solid rgba(255,255,255,.95);border-radius:32px;
+box-shadow:0 14px 30px -18px rgba(78,128,152,.38),0 3px 8px rgba(90,100,120,.08);}
 /* ── floating sidebar ── */
-[data-testid="stSidebar"]{background:transparent!important;border:0!important;padding:60px 0 16px 16px;box-sizing:border-box;}
-[data-testid="stSidebarContent"]{background:linear-gradient(145deg,#FCF7F8,#F5EFF2);border:2px solid rgba(255,255,255,.95);border-radius:30px;
-box-shadow:var(--raise);height:100%;}
-[data-testid="stSidebarContent"] [data-testid="stSidebarUserContent"],[data-testid="stSidebarUserContent"]{padding:4px 16px 22px;}
-.side-title{font-size:15px;font-weight:700;color:var(--ink);margin:2px 0 -6px;display:flex;align-items:center;gap:8px;}
-.side-title::before{content:"";width:4px;height:16px;border-radius:4px;background:var(--brand);}
-[data-testid="stSidebar"] label p{font-size:13px;color:var(--muted);font-weight:600;}
-[data-testid="stSidebar"] [data-testid="stVerticalBlock"]{gap:.7rem;}
-/* ── cards ── */
-[data-testid="stVerticalBlockBorderWrapper"][class*="st-key-card"],
-[data-testid="stVerticalBlockBorderWrapper"]:has(>[class*="st-key-card"]),
-[data-testid="stVerticalBlockBorderWrapper"]:has(>div>[class*="st-key-card"]){background:var(--bg)!important;border:1px solid rgba(206,211,220,.75)!important;border-radius:28px!important;
-padding:24px 26px!important;box-shadow:var(--raise)!important;box-sizing:border-box;}
-/* equal heights + aligned tops for cards that share a row */
-[data-testid="stHorizontalBlock"]{align-items:stretch!important;gap:20px!important;}
+[data-testid="stSidebar"]{background:transparent!important;border:0!important;padding:56px 0 16px 16px;box-sizing:border-box;}
+[data-testid="stSidebarContent"]{background:linear-gradient(145deg,#FCF7F8,#F5EFF2);border:2px solid rgba(255,255,255,.95);border-radius:28px;box-shadow:3px 5px 14px rgba(120,132,150,.16);height:100%;}
+[data-testid="stSidebarHeader"]{height:auto!important;min-height:0!important;padding:10px 14px 0!important;margin:0!important;}
+[data-testid="stSidebarUserContent"]{padding:2px 18px 22px!important;}
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"]{gap:.65rem;}
+.side-title{font-size:15px;font-weight:700;color:var(--ink);margin:0 0 2px;display:flex;align-items:center;gap:8px;line-height:1.4;}
+.side-title::before{content:"";width:4px;height:16px;border-radius:4px;background:var(--brand);flex:none;}
+.side-sep{height:1px;background:var(--line);margin:6px 0 4px;}
+[data-testid="stSidebar"] label p{font-size:13px;color:var(--muted);font-weight:600;line-height:1.45;overflow-wrap:anywhere;}
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"]{line-height:1.5;}
+/* ── cards (plain keyed containers; no thin default border) ── */
+[class*="st-key-card-"]{background:var(--bg);border:1px solid rgba(206,211,220,.55);border-radius:26px;padding:22px 24px;box-shadow:var(--raise);box-sizing:border-box;min-width:0;}
+[data-testid="stHorizontalBlock"]{align-items:stretch!important;gap:18px!important;}
+[data-testid="stColumn"]{min-width:0;}
 [data-testid="stColumn"]>[data-testid="stVerticalBlock"]{flex:1 1 auto;}
 [data-testid="stColumn"]>[data-testid="stVerticalBlock"]>*:only-child{flex:1 1 auto;display:flex;flex-direction:column;}
-[data-testid="stColumn"]>[data-testid="stVerticalBlock"]>*:only-child>[data-testid="stVerticalBlockBorderWrapper"],
-[data-testid="stColumn"]>[data-testid="stVerticalBlock"]>[data-testid="stVerticalBlockBorderWrapper"]:only-child{flex:1 1 auto;}
-/* ── top bar ── */
-.st-key-topbar{background:var(--bg);border:1px solid rgba(206,211,220,.75);border-radius:30px;padding:12px 18px;box-shadow:var(--raise);}
-.st-key-topbar [data-testid="stHorizontalBlock"]{flex-wrap:wrap;gap:12px 18px!important;}
-.st-key-topbar [data-testid="stColumn"]{min-width:min(100%,200px);}
-.st-key-topbar [data-testid="stColumn"]:nth-child(2){min-width:min(100%,560px);}
-.st-key-topbar [data-testid="stDownloadButton"],.st-key-topbar [data-testid="stDownloadButton"] button{width:100%;}
-.brand{display:flex;align-items:center;gap:12px;}
-.brand .logo{width:46px;height:46px;border-radius:16px;flex:none;background:var(--brand) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z'/%3E%3C/svg%3E") center/24px no-repeat;
-box-shadow:0 8px 16px rgba(163,22,33,.32),inset 0 1px 0 rgba(255,255,255,.25);}
-.brand .b-name{font-size:22px;font-weight:700;color:var(--brand);line-height:1.15;}
-.brand .b-sub{font-size:12px;color:var(--muted);margin-top:2px;}
-/* capsule menu (radio) */
-.st-key-topbar [data-testid="stRadio"] [role="radiogroup"]{background:#EFE9EC;border-radius:999px;padding:5px;gap:4px;box-shadow:var(--inset);width:fit-content;max-width:100%;}
-[data-testid="stRadio"] label[data-baseweb="radio"]>div:not(:has([data-testid="stMarkdownContainer"])):not([data-testid="stMarkdownContainer"]){display:none!important;}
-.st-key-topbar [data-testid="stRadio"] label{margin:0;padding:8px 18px;border-radius:999px;cursor:pointer;white-space:nowrap;transition:background .15s,box-shadow .15s;}
-.st-key-topbar [data-testid="stRadio"] label p{font-size:14.5px;font-weight:600;color:var(--ink);white-space:nowrap;}
-.st-key-topbar [data-testid="stRadio"] label:hover{background:rgba(144,194,231,.35);}
-.st-key-topbar [data-testid="stRadio"] label:has(input:checked){background:var(--brand);box-shadow:0 8px 16px rgba(163,22,33,.32);}
+[data-testid="stColumn"]>[data-testid="stVerticalBlock"]>*:only-child>[class*="st-key-card-"],
+[data-testid="stColumn"]>[data-testid="stVerticalBlock"]>[class*="st-key-card-"]:only-child{flex:1 1 auto;}
+/* ── top bar: one row on desktop, deliberate 2-row / stacked layouts when narrow (container queries) ── */
+.st-key-topbar{container-type:inline-size;background:var(--bg);border:1px solid rgba(206,211,220,.6);border-radius:26px;padding:8px 14px;box-shadow:var(--raise);}
+.st-key-topbar [data-testid="stHorizontalBlock"]{flex-wrap:wrap;align-items:center!important;gap:8px 14px!important;}
+.st-key-topbar [data-testid="stColumn"]{flex:0 0 auto!important;width:auto!important;min-width:0!important;}
+.st-key-topbar [data-testid="stColumn"]:nth-child(1){flex:1 1 0!important;min-width:max-content!important;order:1;}
+.st-key-topbar [data-testid="stColumn"]:nth-child(2){flex:0 1 auto!important;max-width:100%;order:2;}
+.st-key-topbar [data-testid="stColumn"]:nth-child(3){flex:1 1 0!important;min-width:max-content!important;order:3;}
+.st-key-topbar [data-testid="stColumn"]:nth-child(3)>[data-testid="stVerticalBlock"]{align-items:flex-end;}
+.st-key-topbar [data-testid="stDownloadButton"]{width:auto;}
+.brand{display:flex;align-items:center;gap:10px;white-space:nowrap;}
+.brand .logo{width:40px;height:40px;border-radius:14px;flex:none;background:var(--brand) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z'/%3E%3C/svg%3E") center/22px no-repeat;box-shadow:0 3px 8px rgba(163,22,33,.25),inset 0 1px 0 rgba(255,255,255,.25);}
+.brand .b-name{font-size:20px;font-weight:700;color:var(--brand);line-height:1.15;display:flex;align-items:center;gap:8px;}
+.brand .b-sub{font-size:12px;color:var(--muted);margin-top:1px;}
+.demo-badge{font-size:11.5px;font-weight:700;color:#2B2100;background:#D8A94A;border-radius:999px;padding:1px 9px;line-height:1.5;}
+/* capsule menu: each item is its own capsule, radio circle removed */
+.st-key-topbar [data-testid="stRadio"] [role="radiogroup"]{background:none;box-shadow:none;padding:5px 3px;gap:6px;flex-wrap:nowrap;width:fit-content;max-width:100%;overflow-x:auto;scrollbar-width:none;}
+.st-key-topbar [data-testid="stRadio"] [role="radiogroup"]::-webkit-scrollbar{display:none;}
+.st-key-topbar [data-testid="stRadio"] label>*:not(input):not(:has([data-testid="stMarkdownContainer"])):not([data-testid="stMarkdownContainer"]){display:none!important;}
+.st-key-topbar [data-testid="stRadio"] label{margin:0!important;padding:7px 14px;border-radius:999px;background:var(--bg);border:1px solid rgba(206,211,220,.85);box-shadow:var(--raise-s);cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:6px;flex:none;transition:background .15s;}
+.st-key-topbar [data-testid="stRadio"] label p{font-size:14px;font-weight:600;color:var(--ink);margin:0;white-space:nowrap;line-height:1.4;}
+.st-key-topbar [data-testid="stRadio"] label:hover{background:#F2ECEF;}
+.st-key-topbar [data-testid="stRadio"] label:has(input:checked){background:var(--brand);border-color:var(--brand);box-shadow:0 3px 8px rgba(163,22,33,.24);}
 .st-key-topbar [data-testid="stRadio"] label:has(input:checked) *{color:#fff!important;}
-.st-key-topbar [data-testid="stRadio"] label:has(input:focus-visible){outline:3px solid rgba(144,194,231,.9);outline-offset:2px;}
+.st-key-topbar [data-testid="stRadio"] label:has(input:focus-visible){outline:3px solid rgba(144,194,231,.95);outline-offset:2px;}
+@container (max-width:900px){.brand .b-sub{display:none;}}
+@container (max-width:800px){
+.st-key-topbar [data-testid="stColumn"]:nth-child(2){flex:1 0 100%!important;order:4;}
+.st-key-topbar [data-testid="stColumn"]:nth-child(2) [role="radiogroup"]{width:100%;}}
+@container (max-width:520px){
+.st-key-topbar [data-testid="stColumn"]:nth-child(1),.st-key-topbar [data-testid="stColumn"]:nth-child(3){flex:1 0 100%!important;}
+.st-key-topbar [data-testid="stColumn"]:nth-child(2){order:2;}
+.st-key-topbar [data-testid="stColumn"]:nth-child(3){order:3;}
+.st-key-topbar [data-testid="stColumn"]:nth-child(3)>[data-testid="stVerticalBlock"]{align-items:flex-start;}}
 /* ── typography ── */
-.h-page{font-size:1.55rem;font-weight:700;color:var(--ink);line-height:1.3;display:flex;align-items:center;gap:12px;}
-.h-page::before{content:"";width:6px;height:28px;border-radius:6px;background:var(--brand);flex:none;}
+.h-page{font-size:1.5rem;font-weight:700;color:var(--ink);line-height:1.3;display:flex;align-items:center;gap:12px;margin:6px 2px 0;}
+.h-page::before{content:"";width:6px;height:26px;border-radius:6px;background:var(--brand);flex:none;}
+.h-page+.desc{margin:2px 2px 0 18px;}
 .h-card{font-size:1.08rem;font-weight:650;color:var(--ink);line-height:1.35;}
+.h-card.first{margin-top:0;}
 .desc{font-size:14px;color:var(--muted);margin-top:4px;}
 [data-testid="stCaptionContainer"],[data-testid="stCaptionContainer"] p{color:var(--muted)!important;font-size:13px;}
 a{color:var(--brand);}
-/* ── metrics, pills, chips ── */
-.metric{background:linear-gradient(145deg,#FFFDFD,#F6F0F3);border:1px solid rgba(206,211,220,.6);border-radius:22px;padding:18px 20px;min-height:136px;box-shadow:var(--raise-s);display:flex;flex-direction:column;gap:6px;box-sizing:border-box;height:100%;}
-.metric .m-top{min-height:30px;display:flex;align-items:center;}
-.metric .m-label{font-size:13.5px;color:var(--muted);font-weight:600;}
-.metric .m-value{font-size:31px;font-weight:700;line-height:1.1;color:var(--ink);}
-.metric.brand .m-value{color:var(--brand);}
-.metric .m-note{font-size:12.5px;color:var(--muted);}
-.pill{display:inline-flex;align-items:center;gap:8px;padding:4px 13px 4px 5px;border-radius:999px;background:#EFEAEC;background:color-mix(in srgb,var(--c) 15%,#FCF7F8);border:1px solid color-mix(in srgb,var(--c) 35%,#FCF7F8);color:var(--ink);font-size:13px;font-weight:600;line-height:1.3;}
-.pill i{width:21px;height:21px;border-radius:50%;background:var(--c);color:var(--fg,#fff);font-style:normal;font-size:12px;font-weight:700;display:inline-grid;place-items:center;flex:none;}
-.chips{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 0;}
-.chip{background:rgba(144,194,231,.38);color:#1F3A4D;border-radius:999px;padding:5px 14px;font-size:13px;font-weight:500;}
-.strip{display:flex;gap:10px;align-items:flex-start;background:rgba(144,194,231,.26);border:1px solid rgba(144,194,231,.75);border-radius:20px;padding:12px 18px;color:var(--ink);font-size:14px;}
+/* ── metric cards: left-aligned, equal height ── */
+.metric{background:var(--bg);border:1px solid rgba(206,211,220,.55);border-radius:24px;padding:18px 20px;min-height:128px;box-shadow:var(--raise);display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:6px;box-sizing:border-box;text-align:left;}
+.metric .m-top{min-height:28px;display:flex;align-items:center;}
+.metric .m-label{font-size:13.5px;color:var(--muted);font-weight:600;line-height:1.3;}
+.metric .m-value{font-size:34px;font-weight:700;line-height:1.1;color:var(--ink);}
+.metric.key .m-value{color:var(--brand);}
+.metric .m-note{font-size:12.5px;color:var(--muted);line-height:1.4;}
+.pill{display:inline-flex;align-items:center;gap:7px;padding:3px 12px 3px 4px;border-radius:999px;background:#EFEAEC;background:color-mix(in srgb,var(--c) 14%,#FCF7F8);border:1px solid color-mix(in srgb,var(--c) 32%,#FCF7F8);color:var(--ink);font-size:12.5px;font-weight:600;line-height:1.3;}
+.pill i{width:19px;height:19px;border-radius:50%;background:var(--c);color:var(--fg,#fff);font-style:normal;font-size:11px;font-weight:700;display:inline-grid;place-items:center;flex:none;}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:0;align-items:center;}
+.chip{background:rgba(144,194,231,.38);color:#1F3A4D;border-radius:999px;padding:4px 14px;font-size:13px;font-weight:500;}
+.strip{display:flex;gap:10px;align-items:flex-start;background:rgba(144,194,231,.26);border:1px solid rgba(144,194,231,.75);border-radius:20px;padding:11px 18px;color:var(--ink);font-size:14px;}
 .strip .ico{width:20px;height:20px;border-radius:50%;background:var(--sec);color:#fff;font-size:12px;font-weight:700;display:inline-grid;place-items:center;flex:none;margin-top:2px;}
 .legend-note{font-size:12.5px;color:var(--muted);line-height:1.5;}
 .legend-stack{display:flex;flex-direction:column;gap:7px;align-items:flex-start;}
-.footer{text-align:center;color:var(--muted);font-size:12.5px;padding:6px 0 0;}
+.steps{margin:0;padding-left:1.2rem;color:var(--ink);line-height:1.8;}
+.footer{text-align:center;color:var(--muted);font-size:12.5px;padding:4px 0 0;}
 /* ── widgets ── */
-.stButton button,.stDownloadButton button,[data-testid="stBaseButton-secondary"],[data-testid="stBaseButton-primary"]{border-radius:999px!important;padding:.45rem 1.2rem;font-weight:600;transition:box-shadow .15s,background .15s;}
+.stButton button,.stDownloadButton button,[data-testid="stBaseButton-secondary"],[data-testid="stBaseButton-primary"]{border-radius:999px!important;padding:.4rem 1.1rem;font-weight:600;transition:background .15s;max-width:100%;}
 .stButton button[kind="secondary"],.stDownloadButton button[kind="secondary"],[data-testid="stBaseButton-secondary"]{background:var(--bg);border:1px solid var(--line);color:var(--ink);box-shadow:var(--raise-s);}
-.stButton button[kind="primary"],.stDownloadButton button[kind="primary"],[data-testid="stBaseButton-primary"]{background:var(--brand)!important;border:1px solid var(--brand)!important;color:#fff!important;box-shadow:0 8px 16px rgba(163,22,33,.30);}
+.stButton button[kind="primary"],.stDownloadButton button[kind="primary"],[data-testid="stBaseButton-primary"]{background:var(--brand)!important;border:1px solid var(--brand)!important;color:#fff!important;box-shadow:0 3px 8px rgba(163,22,33,.22);}
 .stButton button[kind="primary"] *,.stDownloadButton button[kind="primary"] *,[data-testid="stBaseButton-primary"] *{color:#fff!important;}
 .stButton button[kind="primary"]:hover,.stDownloadButton button[kind="primary"]:hover,[data-testid="stBaseButton-primary"]:hover{background:var(--brand-d)!important;border-color:var(--brand-d)!important;}
 button:focus-visible{outline:3px solid rgba(144,194,231,.95)!important;outline-offset:2px;}
 [data-baseweb="input"],[data-baseweb="base-input"],[data-baseweb="select"]>div,[data-baseweb="textarea"]{background:var(--bg)!important;border-radius:16px!important;border-color:var(--line)!important;}
-[data-baseweb="input"],[data-baseweb="select"]>div{box-shadow:inset 2px 2px 5px rgba(120,132,150,.16),inset -2px -2px 5px rgba(255,255,255,.95);}
-[data-baseweb="input"]:focus-within,[data-baseweb="select"]>div:focus-within{border-color:var(--brand)!important;box-shadow:0 0 0 3px rgba(163,22,33,.14)!important;}
-/* multiselect: keep every chosen tag fully visible (no clipping / inner scroll) */
+[data-baseweb="input"],[data-baseweb="select"]>div{box-shadow:var(--inset);}
+[data-baseweb="input"]:focus-within,[data-baseweb="select"]>div:focus-within{border-color:var(--brand)!important;box-shadow:0 0 0 3px rgba(163,22,33,.12)!important;}
 [data-testid="stMultiSelect"] [data-baseweb="select"]>div{max-height:none!important;overflow:visible!important;}
 [data-testid="stMultiSelect"] [data-baseweb="select"]>div>div{max-height:none!important;overflow:visible!important;flex-wrap:wrap;gap:4px;}
 [data-baseweb="tag"]{background:rgba(144,194,231,.45)!important;color:#1F3A4D!important;border-radius:999px!important;max-width:100%!important;height:auto!important;margin:0!important;padding:1px 4px 1px 10px!important;}
 [data-baseweb="tag"] span{max-width:none!important;overflow:visible!important;text-overflow:clip!important;white-space:normal!important;color:#1F3A4D!important;font-size:12.5px!important;font-weight:500;}
 [data-baseweb="tag"] svg{fill:#1F3A4D!important;}
-[data-testid="stFileUploaderDropzone"]{background:var(--bg);border:1.5px dashed var(--line);border-radius:18px;}
+[data-testid="stFileUploader"] section,[data-testid="stFileUploaderDropzone"]{background:var(--bg);border:1.5px dashed var(--line);border-radius:18px;max-width:100%;box-sizing:border-box;}
+[data-testid="stFileUploaderDropzone"] button{max-width:100%;}
+[data-testid="stFileUploaderDropzoneInstructions"],[data-testid="stFileUploaderDropzoneInstructions"] *{font-size:12px;overflow-wrap:anywhere;}
+[data-testid="stSidebar"] [data-testid="stToggle"] label,[data-testid="stSidebar"] [data-testid="stCheckbox"] label{max-width:100%;}
 [data-testid="stAlert"]{border-radius:20px!important;border:1px solid var(--line)!important;}
 [data-testid="stDataFrame"]{border-radius:18px;overflow:hidden;border:1px solid var(--line);}
-[data-testid="stPlotlyChart"]{border-radius:18px;overflow:hidden;}
+[data-testid="stPlotlyChart"]{border-radius:18px;overflow:hidden;background:transparent;}
+[data-testid="stPlotlyChart"] .main-svg,[data-testid="stPlotlyChart"] .js-plotly-plot,[data-testid="stPlotlyChart"] .plot-container{background:transparent!important;}
 /* ── responsive ── */
-@media(max-width:1100px){.block-container,[data-testid="stMainBlockContainer"]{padding:22px 20px 24px!important;border-radius:28px;}
-[data-testid="stVerticalBlockBorderWrapper"][class*="st-key-card"],[data-testid="stVerticalBlockBorderWrapper"]:has(>[class*="st-key-card"]),[data-testid="stVerticalBlockBorderWrapper"]:has(>div>[class*="st-key-card"]){padding:20px!important;}
-.metric .m-value{font-size:27px;}}
-@media(max-width:900px){.st-key-topbar [data-testid="stRadio"] [role="radiogroup"]{flex-wrap:nowrap;overflow-x:auto;}}
+@media(max-width:1100px){.block-container,[data-testid="stMainBlockContainer"]{padding:20px 18px 22px!important;border-radius:28px;}
+[class*="st-key-card-"]{padding:20px;}
+.metric .m-value{font-size:30px;}}
 @media(max-width:800px){.block-container,[data-testid="stMainBlockContainer"]{width:calc(100% - 16px);margin:52px auto 20px!important;padding:14px 12px 18px!important;border-radius:24px;}
 [data-testid="stSidebar"]{padding:12px;}
-.st-key-topbar{padding:12px;border-radius:24px;}
+.st-key-topbar{padding:8px 10px;border-radius:22px;}
 [data-testid="stHorizontalBlock"]{gap:14px!important;}
-.h-page{font-size:1.3rem;}.metric{min-height:118px;padding:15px;}.metric .m-value{font-size:25px;}}
+[class*="st-key-card-"]{padding:16px;border-radius:22px;}
+.h-page{font-size:1.3rem;}.metric{min-height:112px;padding:15px;}.metric .m-value{font-size:28px;}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;}}
 </style>'''
 st.markdown(CSS, unsafe_allow_html=True)
@@ -143,8 +162,8 @@ st.markdown(CSS, unsafe_allow_html=True)
 
 # ── small UI helpers ─────────────────────────────────────────────────────────
 def card(name):
-    """A real bordered container: heading, text and charts live inside it."""
-    return st.container(border=True, key=f"card-{name}")
+    """Rounded soft-UI card (keyed container): heading, text and charts live inside it."""
+    return st.container(key=f"card-{name}")
 
 
 def head(title, desc=None, page=False):
@@ -171,7 +190,7 @@ def metric(label, value, note, tag=None):
     if tag:
         top, cls = pill_html(label, tag[0], tag[1]), "metric"
     else:
-        top, cls = f'<span class="m-label">{escape(label)}</span>', "metric brand"
+        top, cls = f'<span class="m-label">{escape(label)}</span>', "metric key"
     st.markdown(f'<div class="{cls}"><div class="m-top">{top}</div><div class="m-value">{escape(str(value))}</div><div class="m-note">{escape(note)}</div></div>', unsafe_allow_html=True)
 
 
@@ -267,7 +286,7 @@ def status_chart(frame):
 def show_map(frame, limit=12000):
     located = frame.dropna(subset=["centroid_lat", "centroid_lon"])
     if located.empty:
-        st.info("ยังไม่มี centroid_lat / centroid_lon สำหรับแสดงแผนที่")
+        strip("ยังไม่มี centroid_lat / centroid_lon สำหรับแสดงแผนที่")
         return
     sampled = located if len(located) <= limit else located.sample(limit, random_state=42)
     fig = px.scatter_map(sampled, lat="centroid_lat", lon="centroid_lon", color="display_status", color_discrete_map=colors, category_orders={"display_status": order}, hover_name="plot_id", hover_data={"tambon_name": True, "burn_pct": ":.1f", "distance_to_collection_km": ":.2f", "centroid_lat": False, "centroid_lon": False}, zoom=10, center={"lat": located["centroid_lat"].median(), "lon": located["centroid_lon"].median()}, map_style="open-street-map", labels={"display_status": "สถานะ", "burn_pct": "สัญญาณเผา (%)", "distance_to_collection_km": "ระยะทาง (กม.)", "tambon_name": "ตำบล"})
@@ -282,7 +301,7 @@ def show_map(frame, limit=12000):
 def show_scatter(frame):
     eligible = frame[~frame["display_status"].eq("ข้อมูลไม่เพียงพอ")].dropna(subset=["burn_pct", "access_gap_index"])
     if eligible.empty:
-        st.info("ยังไม่มีแปลงที่มีสถานะและค่า burn_pct / access_gap_index ครบ")
+        strip("ยังไม่มีแปลงที่มีสถานะและค่า burn_pct / access_gap_index ครบ")
         return
     sampled = eligible if len(eligible) <= 6000 else eligible.sample(6000, random_state=42)
     fig = px.scatter(sampled, x="access_gap_index", y="burn_pct", color="display_status", color_discrete_map=colors, hover_name="plot_id", hover_data=["tambon_name"], opacity=.6, labels={"access_gap_index": "Access Gap (0–1)", "burn_pct": "สัดส่วนสัญญาณเผา (%)", "display_status": "สถานะ"})
@@ -302,10 +321,18 @@ def demo_data():
     return pd.DataFrame({"plot_id": [f"DEMO-{i:04}" for i in range(n)], "tambon_name": rng.choice(["ต.ท่าตะโก", "ต.ดอนคา", "ต.ทำนบ", "ต.พนมรอก"], n), "plot_area_rai": rng.uniform(.5, 20, n), "burn_status": status, "burn_pct": burn, "valid_observation_pct": np.where(status == "Unknown", rng.uniform(10, 70, n), rng.uniform(80, 100, n)), "centroid_lat": rng.uniform(15.5, 15.8, n), "centroid_lon": rng.uniform(100.3, 100.6, n), "access_gap_index": rng.uniform(0, 1, n), "distance_to_collection_km": rng.uniform(0, 25, n), "exclusion_reason": np.where(status == "Unknown", "ข้อมูลจำลอง: coverage ไม่พอ", ""), "needs_verification": status == "Unknown"})
 
 
+st.session_state.setdefault("demo_mode", False)
+
+
+def start_demo():
+    st.session_state["demo_mode"] = True
+
+
 # ── sidebar skeleton (order: filters → status key → data source) ─────────────
 with st.sidebar:
     filter_box = st.container()
     legend_box = st.container()
+    st.markdown('<div class="side-sep"></div>', unsafe_allow_html=True)
     data_box = st.container()
 
 with data_box:
@@ -313,14 +340,15 @@ with data_box:
     st.caption("ใส่ CSV ใน data/ บน GitHub หรืออัปโหลดเพื่อดูในเซสชันนี้")
     uploaded = st.file_uploader("ตารางแปลง burnwise_master_plots.csv", type=["csv"], key="plots_upload")
     optional_overview = st.file_uploader("ภาพรวมตำบล (ไม่จำเป็น)", type=["csv"], key="overview_upload")
-    demo = st.toggle("ทดลองหน้าตาด้วยข้อมูลจำลอง", value=False)
+    demo = st.toggle("ทดลองหน้าตาด้วยข้อมูลจำลอง", key="demo_mode")
     period = st.text_input("ช่วงศึกษาที่ระบุใน notebook", placeholder="เช่น พ.ย. 2568 – ม.ค. 2569")
     st.caption("ชื่อช่วงศึกษาใช้แสดงประกอบเท่านั้น ไม่ได้กรองวันที่ใน CSV")
 
 # ── top bar: logo + capsule menu + download slot ─────────────────────────────
 with st.container(key="topbar"):
     c_brand, c_nav, c_dl = st.columns([1.15, 2.7, 1.2], vertical_alignment="center")
-    c_brand.markdown('<div class="brand"><span class="logo"></span><div><div class="b-name">BurnWise</div><div class="b-sub">อำเภอท่าตะโก · Field Insights</div></div></div>', unsafe_allow_html=True)
+    badge = '<span class="demo-badge">ข้อมูลจำลอง</span>' if demo else ""
+    c_brand.markdown(f'<div class="brand"><span class="logo"></span><div><div class="b-name">BurnWise{badge}</div><div class="b-sub">อำเภอท่าตะโก · Field Insights</div></div></div>', unsafe_allow_html=True)
     with c_nav:
         page = st.radio("หน้าเว็บ", PAGES, horizontal=True, label_visibility="collapsed", format_func=lambda p: f":material/{PAGE_ICON[p]}: {p}")
     dl_slot = c_dl.empty()
@@ -336,8 +364,8 @@ try:
     else:
         with card("start"):
             head("เริ่มต้นใช้งาน BurnWise", "ยังไม่มีข้อมูลแปลงให้แสดง", page=True)
-            st.info("อัปโหลด burnwise_master_plots.csv ทางซ้าย หรือเพิ่มไฟล์นี้ในโฟลเดอร์ data ของ GitHub")
-            st.markdown("เปิด **ทดลองหน้าตาด้วยข้อมูลจำลอง** เพื่อดูหน้าเว็บก่อนนำข้อมูลจริงเข้ามา")
+            st.markdown('<ol class="steps"><li>อัปโหลด <b>burnwise_master_plots.csv</b> ทางแถบด้านซ้าย</li><li>หรือเพิ่มไฟล์นี้ในโฟลเดอร์ <b>data</b> ของ GitHub</li><li>หรือดูหน้าตาเว็บก่อนด้วยข้อมูลจำลอง (ไม่ใช่ผลของโครงการ)</li></ol>', unsafe_allow_html=True)
+            st.button(":material/science: ทดลองด้วยข้อมูลจำลอง", type="primary", on_click=start_demo)
         st.stop()
     plots, mode = prepare(raw)
 except (ValueError, OSError) as exc:
@@ -372,25 +400,24 @@ st.markdown(f'<div class="chips"><span class="chip">แหล่งข้อม�
 
 f = plots[plots["tambon_name"].isin(selected_names) & plots["display_status"].isin(selected_status)].copy()
 if f.empty:
-    st.info("ไม่มีแปลงตรงกับตัวกรอง กรุณาเลือกตำบลหรือสถานะเพิ่ม"); st.stop()
+    strip("ไม่มีแปลงตรงกับตัวกรอง กรุณาเลือกตำบลหรือสถานะเพิ่ม"); st.stop()
 
 export_cols = [c for c in f.columns if c not in ["display_status", "review_flag"]]
-dl_slot.download_button(":material/download: ดาวน์โหลดแปลงที่เลือก", csv_bytes(f[export_cols]), "burnwise_filtered_plots.csv", "text/csv", type="primary")
+dl_slot.download_button(":material/download: ดาวน์โหลด", csv_bytes(f[export_cols]), "burnwise_filtered_plots.csv", "text/csv", type="primary", help="ดาวน์โหลดแปลงที่เลือกเป็น CSV")
 
 # ── pages ────────────────────────────────────────────────────────────────────
 if page == "ภาพรวม":
-    with card("hero"):
-        head("ภาพรวมพื้นที่นำร่อง", f"อำเภอท่าตะโก · {len(f):,} จาก {len(plots):,} แปลง · {f['tambon_name'].nunique()} ตำบล · พื้นที่รวม {f['plot_area_rai'].sum():,.1f} ไร่", page=True)
-        if mode == "modern":
-            cards = [("แปลงทั้งหมด", len(f), "แปลงในตัวกรอง", None)] + [(label, int(f["display_status"].eq(label).sum()), f"{f['display_status'].eq(label).mean()*100:.1f}% ของแปลงที่เลือก", (STATUS_ICON[label], colors[label])) for label in order]
-        else:
-            cards = [("แปลงทั้งหมด", len(f), "แปลงในตัวกรอง", None),
-                     ("พื้นที่รวม (ไร่)", f"{f['plot_area_rai'].sum():,.0f}", "ผลรวมพื้นที่แปลงตาม CSV", None),
-                     ("Tier แดง (เดิม)", int(f["display_status"].eq("Tier แดง (เดิม)").sum()), "กลุ่มจากตรรกะเดิม ไม่ยืนยันว่าเผา", (STATUS_ICON["Tier แดง (เดิม)"], colors["Tier แดง (เดิม)"])),
-                     ("ข้อมูลไม่เพียงพอ", int(f["display_status"].eq("ข้อมูลไม่เพียงพอ").sum()), "แยกจากกลุ่มที่จัดสถานะได้", (STATUS_ICON["ข้อมูลไม่เพียงพอ"], colors["ข้อมูลไม่เพียงพอ"]))]
-        for col, (label, value, note, tag) in zip(st.columns(4), cards):
-            with col:
-                metric(label, f"{value:,}" if isinstance(value, int) else value, note, tag)
+    head("ภาพรวมพื้นที่นำร่อง", f"อำเภอท่าตะโก · {len(f):,} จาก {len(plots):,} แปลง · {f['tambon_name'].nunique()} ตำบล · พื้นที่รวม {f['plot_area_rai'].sum():,.1f} ไร่", page=True)
+    if mode == "modern":
+        cards = [("แปลงทั้งหมด", len(f), "แปลงในตัวกรอง", None)] + [(label, int(f["display_status"].eq(label).sum()), f"{f['display_status'].eq(label).mean()*100:.1f}% ของแปลงที่เลือก", (STATUS_ICON[label], colors[label])) for label in order]
+    else:
+        cards = [("แปลงทั้งหมด", len(f), "แปลงในตัวกรอง", None),
+                 ("พื้นที่รวม (ไร่)", f"{f['plot_area_rai'].sum():,.0f}", "ผลรวมพื้นที่แปลงตาม CSV", None),
+                 ("Tier แดง (เดิม)", int(f["display_status"].eq("Tier แดง (เดิม)").sum()), "กลุ่มจากตรรกะเดิม ไม่ยืนยันว่าเผา", (STATUS_ICON["Tier แดง (เดิม)"], colors["Tier แดง (เดิม)"])),
+                 ("ข้อมูลไม่เพียงพอ", int(f["display_status"].eq("ข้อมูลไม่เพียงพอ").sum()), "แยกจากกลุ่มที่จัดสถานะได้", (STATUS_ICON["ข้อมูลไม่เพียงพอ"], colors["ข้อมูลไม่เพียงพอ"]))]
+    for col, (label, value, note, tag) in zip(st.columns(4), cards):
+        with col:
+            metric(label, f"{value:,}" if isinstance(value, int) else value, note, tag)
     left, right = st.columns([1.1, 1])
     with left, card("tambon-status"):
         head("สถานะรายตำบล", "สัดส่วนจำนวนแปลงในตัวกรอง รวมกลุ่มข้อมูลไม่พอ")
@@ -421,7 +448,7 @@ if page == "ภาพรวม":
         else:
             mean_burn = f[~f["display_status"].eq("ข้อมูลไม่เพียงพอ")].groupby("tambon_name", as_index=False)["burn_pct"].mean().dropna()
             if mean_burn.empty:
-                st.info("ยังไม่มีค่าสัญญาณเผาในแปลงที่จัดสถานะได้")
+                strip("ยังไม่มีค่าสัญญาณเผาในแปลงที่จัดสถานะได้")
             else:
                 fig = px.bar(mean_burn.sort_values("burn_pct"), x="burn_pct", y="tambon_name", orientation="h", color_discrete_sequence=[S_RED], labels={"tambon_name": "", "burn_pct": "ค่าเฉลี่ยต่อแปลง (%)"})
                 st.plotly_chart(chart_style(fig), width="stretch")
@@ -464,17 +491,16 @@ elif page == "สำรวจแปลง":
 
 elif page == "คุณภาพข้อมูล":
     unknown = f[f["display_status"].eq("ข้อมูลไม่เพียงพอ")]
-    with card("hero"):
-        head("คุณภาพข้อมูลและจุดที่ต้องตรวจสอบ", "สัดส่วนภาพใช้ได้และเหตุผลที่แปลงถูกจัดเป็นข้อมูลไม่เพียงพอ ก่อนเชื่อผลใด ๆ ควรตรวจหน้านี้ก่อน", page=True)
-        a, b, c = st.columns(3)
-        with a: metric("ข้อมูลไม่เพียงพอ", f"{len(unknown):,}", "แปลงที่ยังไม่ควรสรุปสถานะ", (STATUS_ICON["ข้อมูลไม่เพียงพอ"], colors["ข้อมูลไม่เพียงพอ"]))
-        with b: metric("ไม่มีระยะทางถนน", f"{f['distance_to_collection_km'].isna().sum():,}", "ไม่แทนระยะทางที่หายด้วยศูนย์", ("!", S_AMBER))
-        with c: metric("ไม่มี Access Gap", f"{f['access_gap_index'].isna().sum():,}", "ตรวจข้อมูลประกอบก่อนจัดลำดับ", ("!", S_AMBER))
+    head("คุณภาพข้อมูลและจุดที่ต้องตรวจสอบ", "สัดส่วนภาพใช้ได้และเหตุผลที่แปลงถูกจัดเป็นข้อมูลไม่เพียงพอ ก่อนเชื่อผลใด ๆ ควรตรวจหน้านี้ก่อน", page=True)
+    a, b, c = st.columns(3)
+    with a: metric("ข้อมูลไม่เพียงพอ", f"{len(unknown):,}", "แปลงที่ยังไม่ควรสรุปสถานะ", (STATUS_ICON["ข้อมูลไม่เพียงพอ"], colors["ข้อมูลไม่เพียงพอ"]))
+    with b: metric("ไม่มีระยะทางถนน", f"{f['distance_to_collection_km'].isna().sum():,}", "ไม่แทนระยะทางที่หายด้วยศูนย์", ("!", S_AMBER))
+    with c: metric("ไม่มี Access Gap", f"{f['access_gap_index'].isna().sum():,}", "ตรวจข้อมูลประกอบก่อนจัดลำดับ", ("!", S_AMBER))
     left, right = st.columns(2)
     with left, card("coverage"):
         head("Coverage" if mode == "modern" else "สัดส่วน valid_observation_pct เดิม", "การกระจายตัวของ valid_observation_pct")
         valid = f.dropna(subset=["valid_observation_pct"])
-        if valid.empty: st.info("ไม่มีข้อมูล valid_observation_pct")
+        if valid.empty: strip("ไม่มีข้อมูล valid_observation_pct")
         else:
             fig = px.histogram(valid, x="valid_observation_pct", nbins=20, color_discrete_sequence=[SEC], labels={"valid_observation_pct": "สัดส่วน (%)"})
             fig.update_traces(marker_line_color=BG, marker_line_width=1)
@@ -488,7 +514,7 @@ elif page == "คุณภาพข้อมูล":
         st.dataframe(counts, hide_index=True, width="stretch")
     with card("notes"):
         head("ข้อควรทราบ")
-        st.info("GISTDA เป็นส่วนเปรียบเทียบเพิ่มเติม: เว็บนี้ไม่ต้องรอไฟล์รอยเผา หากช่วงอ้างอิงไม่ครบ ให้เว้นผลประเมินส่วนนั้นไว้")
+        strip("GISTDA เป็นส่วนเปรียบเทียบเพิ่มเติม: เว็บนี้ไม่ต้องรอไฟล์รอยเผา หากช่วงอ้างอิงไม่ครบ ให้เว้นผลประเมินส่วนนั้นไว้")
         st.markdown("ผล FIRMS ที่เคยทดสอบ 2/2 จุดที่อ่านภาพได้ มีตัวอย่างน้อย และไม่มีตัวอย่างยืนยันไม่เผา จึงยังไม่ใช้สรุปความแม่นยำทั้งโครงการ")
 
 else:
