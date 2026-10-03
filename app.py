@@ -9,6 +9,7 @@ from html import escape
 import io
 import re
 import unicodedata
+from urllib.parse import quote
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -24,9 +25,27 @@ INK, MUTED = "#26303B", "#5B6675"
 S_RED, S_GREEN, S_AMBER, S_GREY = BRAND, "#4B8F6D", "#D8A94A", "#9AA5B4"
 FONT_PLOT = "Noto Sans Thai, Sarabun, sans-serif"
 
+def _svg_mask(paths):
+    """Inline stroke icon as a CSS url() so it can be used with mask-image and recoloured by background."""
+    svg = ("<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' "
+           "stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'>" + "".join(f"<path d='{p}'/>" for p in paths) + "</svg>")
+    return 'url("data:image/svg+xml,' + quote(svg, safe="") + '")'
+
+
+ICON_FILTER = _svg_mask(["M22 3H2l8 9.46V19l4 2v-8.54L22 3z"])
+ICON_UPLOAD = _svg_mask(["M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4", "M17 8l-5-5-5 5", "M12 3v12"])
+ICON_CLOUD = _svg_mask(["M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242", "M12 12v9", "M16 16l-4-4-4 4"])
+
 STATUS = {"Burn": "ตรวจพบสัญญาณเผา", "No Burn": "ไม่เข้าเกณฑ์ตรวจพบ", "Unknown": "ข้อมูลไม่เพียงพอ"}
 STATUS_ICON = {"ตรวจพบสัญญาณเผา": "▲", "ไม่เข้าเกณฑ์ตรวจพบ": "✓", "ข้อมูลไม่เพียงพอ": "?",
                "Tier เขียว (เดิม)": "✓", "Tier เหลือง (เดิม)": "!", "Tier แดง (เดิม)": "▲"}
+STATUS_MAT = {"ตรวจพบสัญญาณเผา": "warning", "ไม่เข้าเกณฑ์ตรวจพบ": "check", "ข้อมูลไม่เพียงพอ": "question_mark",
+              "Tier เขียว (เดิม)": "check", "Tier เหลือง (เดิม)": "priority_high", "Tier แดง (เดิม)": "warning"}
+LEGEND_TEXT = {"ตรวจพบสัญญาณเผา": "พบสัญญาณเข้าเกณฑ์จากดาวเทียม ไม่ใช่หลักฐานยืนยันรายบุคคล",
+               "ไม่เข้าเกณฑ์ตรวจพบ": "ไม่เข้าเกณฑ์ตรวจพบ ไม่ใช่หลักฐานยืนยันว่าไม่เผาหรือไถกลบ",
+               "ข้อมูลไม่เพียงพอ": "ข้อมูลสังเกตไม่เพียงพอ แยกจากกลุ่มที่จัดสถานะได้",
+               "Tier เขียว (เดิม)": "กลุ่มจากตรรกะเดิม ไม่ยืนยันว่าเผา", "Tier เหลือง (เดิม)": "กลุ่มจากตรรกะเดิม ไม่ยืนยันว่าเผา",
+               "Tier แดง (เดิม)": "กลุ่มจากตรรกะเดิม ไม่ยืนยันว่าเผา"}
 PAGES = ["ภาพรวม", "สำรวจแปลง", "คุณภาพข้อมูล", "เกี่ยวกับโครงการ"]
 PAGE_ICON = {"ภาพรวม": "space_dashboard", "สำรวจแปลง": "map", "คุณภาพข้อมูล": "fact_check", "เกี่ยวกับโครงการ": "info"}
 
@@ -48,21 +67,92 @@ background:linear-gradient(145deg,#F7F2F4,#EFE9EC);border:2px solid rgba(255,255
 box-shadow:0 14px 30px -18px rgba(78,128,152,.38),0 3px 8px rgba(90,100,120,.08);}
 /* ── floating sidebar ── */
 [data-testid="stSidebar"]{background:transparent!important;border:0!important;padding:56px 0 16px 16px;box-sizing:border-box;}
-[data-testid="stSidebarContent"]{background:linear-gradient(145deg,#FCF7F8,#F5EFF2);border:2px solid rgba(255,255,255,.95);border-radius:28px;box-shadow:3px 5px 14px rgba(120,132,150,.16);height:100%;}
+[data-testid="stSidebarContent"]{background:linear-gradient(145deg,#FCF7F8,#F5EFF2);border:2px solid rgba(255,255,255,.95);border-radius:28px;box-shadow:3px 5px 14px rgba(120,132,150,.16);height:100%;
+overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#CED3DC transparent;padding:0!important;}
+[data-testid="stSidebar"][aria-expanded="true"]{min-width:min(336px,calc(100vw - 24px))!important;}
 [data-testid="stSidebarHeader"]{height:auto!important;min-height:0!important;padding:10px 14px 0!important;margin:0!important;}
-[data-testid="stSidebarUserContent"]{padding:2px 18px 22px!important;}
-[data-testid="stSidebar"] [data-testid="stVerticalBlock"]{gap:.65rem;}
-.side-title{font-size:15px;font-weight:700;color:var(--ink);margin:0 0 2px;display:flex;align-items:center;gap:8px;line-height:1.4;}
-.side-title::before{content:"";width:4px;height:16px;border-radius:4px;background:var(--brand);flex:none;}
-.side-sep{height:1px;background:var(--line);margin:6px 0 4px;}
-[data-testid="stSidebar"] label p{font-size:13px;color:var(--muted);font-weight:600;line-height:1.45;overflow-wrap:anywhere;}
+[data-testid="stSidebarUserContent"]{padding:8px 22px 24px!important;min-width:0;box-sizing:border-box;}
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"]{gap:12px;min-width:0;}
+[data-testid="stSidebar"] [data-testid="stElementContainer"],[data-testid="stSidebar"] [data-testid="stMarkdownContainer"]{min-width:0;max-width:100%;}
+[data-testid="stSidebar"] p,[data-testid="stSidebar"] span,[data-testid="stSidebar"] label{overflow-wrap:anywhere;}
+.st-key-side-filters{gap:22px!important;}
+.st-key-side-upload{gap:22px!important;border-top:1px solid var(--line);padding-top:20px;margin-top:8px;}
+[class*="st-key-fg-"]{gap:12px!important;}
+.st-key-statuslist{gap:8px!important;}
+.st-key-statuslist>*,.st-key-fg-tambon>[data-testid="stLayoutWrapper"],.st-key-fg-tambon [data-testid="stPopover"]{width:100%!important;}
+/* Streamlit gives every markdown container margin-bottom:-1rem (cancels <p> spacing). Our own HTML blocks have no <p>, so that
+   made them 16px shorter than they look and ate the gaps below them: neutralise it for these blocks only. */
+.st-key-page-top [data-testid="stMarkdownContainer"]:has(>.strip),.st-key-page-top [data-testid="stMarkdownContainer"]:has(>.chips),
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"]:has(>.side-head),[data-testid="stSidebar"] [data-testid="stMarkdownContainer"]:has(>.field-label),
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"]:has(>.up-status),[data-testid="stSidebar"] [data-testid="stMarkdownContainer"]:has(>.legend-list){margin-bottom:0!important;}
 [data-testid="stSidebar"] [data-testid="stCaptionContainer"]{line-height:1.5;}
+.side-head{display:flex;align-items:flex-start;gap:12px;}
+.side-ico{width:28px;height:28px;flex:none;margin-top:1px;background:var(--brand);-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-position:center;mask-position:center;-webkit-mask-size:contain;mask-size:contain;}
+.side-ico.filter{-webkit-mask-image:@@FILTER@@;mask-image:@@FILTER@@;}
+.side-ico.upload{-webkit-mask-image:@@UPLOAD@@;mask-image:@@UPLOAD@@;}
+.side-t{font-size:21px;font-weight:700;line-height:1.25;color:var(--ink);}
+.side-d{font-size:12.5px;color:var(--muted);line-height:1.5;margin-top:2px;overflow-wrap:anywhere;}
+.field-label{font-size:14px;font-weight:600;color:var(--ink);line-height:1.4;overflow-wrap:anywhere;}
+.field-label small{font-size:12px;font-weight:500;color:var(--muted);}
+/* tambon picker (popover) */
+[data-testid="stSidebar"] [data-testid="stPopover"]{width:100%;}
+[data-testid="stSidebar"] [data-testid="stPopover"]>button,[data-testid="stSidebar"] [data-testid="stPopover"] button[data-testid^="stBaseButton"]{width:100%;min-height:46px;height:auto;justify-content:space-between;text-align:left;border-radius:16px!important;padding:8px 14px;background:var(--bg);box-shadow:var(--inset);border:1px solid var(--line);}
+[data-testid="stSidebar"] [data-testid="stPopover"] button>div{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;}
+[data-testid="stSidebar"] [data-testid="stPopover"] button>div>div:first-child{flex:1 1 auto;min-width:0;display:flex;justify-content:flex-start;}
+[data-testid="stSidebar"] [data-testid="stPopover"] button>div>div:first-child>span{justify-content:flex-start;}
+[data-testid="stSidebar"] [data-testid="stPopover"] button p{font-size:14px;font-weight:600;text-align:left;white-space:normal;line-height:1.4;}
+[data-testid="stPopoverBody"]{width:min(310px,92vw);max-width:92vw;border-radius:20px!important;background:var(--bg)!important;border:1px solid var(--line)!important;box-shadow:0 10px 28px rgba(60,72,92,.22)!important;}
+[data-testid="stPopoverBody"] [data-testid="stCheckbox"] label p{font-size:14px;overflow-wrap:anywhere;}
+.st-key-tb-all,.st-key-tb-none{width:100%!important;}
+.st-key-tb-all button,.st-key-tb-none button{width:100%;}
+/* status checkboxes */
+[class*="st-key-chk-"]{background:var(--bg);border:1px solid rgba(206,211,220,.9);border-radius:14px;padding:9px 12px;box-shadow:var(--raise-s);min-width:0;box-sizing:border-box;transition:background .15s;}
+[class*="st-key-chk-"]:hover{background:#F6EEF1;}
+[class*="st-key-chk-"] [data-testid="stCheckbox"] label{align-items:center;gap:8px;width:100%;}
+[class*="st-key-chk-"] [data-testid="stCheckbox"] label p{font-size:14px;font-weight:600;line-height:1.4;white-space:normal;overflow-wrap:anywhere;color:var(--ink);margin:0;}
+[class*="st-key-chk-"] label span[role="img"]{width:24px;height:24px;border-radius:50%;font-size:16px!important;display:inline-flex!important;align-items:center;justify-content:center;vertical-align:middle!important;margin-right:8px;flex:none;line-height:1;}
+/* collapsible explanation */
+[data-testid="stSidebar"] [data-testid="stExpander"] details{background:var(--bg);border:1px solid rgba(206,211,220,.9);border-radius:16px;box-shadow:var(--raise-s);}
+[data-testid="stSidebar"] [data-testid="stExpander"] summary{padding:10px 14px;}
+[data-testid="stSidebar"] [data-testid="stExpander"] summary p{font-size:14px;font-weight:600;}
+.legend-list{display:flex;flex-direction:column;gap:12px;}
+.legend-row{display:flex;flex-direction:column;gap:4px;align-items:flex-start;font-size:12.5px;color:var(--muted);line-height:1.5;}
+/* upload zones: dashed, rounded; text and button localised by CSS so they work with Streamlit's English uploader */
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"]{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:18px 14px 16px;background:var(--bg);border:1.5px dashed #AAB3C1;border-radius:20px;text-align:center;box-sizing:border-box;max-width:100%;transition:background .15s,border-color .15s;}
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"]:hover{border-color:var(--brand);background:#FBF1F3;}
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"]:not(:has([data-testid="stFileChips"],[data-testid="stFileChip"]))::before{content:"";width:34px;height:34px;flex:none;background:var(--brand);-webkit-mask:@@CLOUD@@ center/contain no-repeat;mask:@@CLOUD@@ center/contain no-repeat;}
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"]:not(:has([data-testid="stFileChips"],[data-testid="stFileChip"]))::after{content:"ไฟล์ CSV";font-size:12px;color:var(--muted);line-height:1.4;}
+.st-key-plots_upload [data-testid="stFileUploaderDropzone"]:not(:has([data-testid="stFileChips"],[data-testid="stFileChip"]))::after{content:"ข้อมูลรายแปลง · ไฟล์ CSV";}
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzoneInstructions"]{display:none!important;}
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"]>span{display:contents;}
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] button[data-testid="stBaseButton-secondary"]{font-size:0!important;min-height:0;padding:7px 18px!important;border-radius:999px!important;background:#fff;border:1px solid var(--brand);color:var(--brand);box-shadow:none;}
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] button[data-testid="stBaseButton-secondary"]>*{display:none!important;}
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] button[data-testid="stBaseButton-secondary"]::after{content:"เลือกไฟล์ CSV";font-size:14px;font-weight:600;color:var(--brand);line-height:1.4;white-space:nowrap;}
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] button[data-testid="stBaseButton-secondary"]:hover{background:var(--brand);}
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] button[data-testid="stBaseButton-secondary"]:hover::after{color:#fff;}
+.st-key-overview_upload [data-testid="stFileUploaderDropzone"]:not(:has([data-testid="stFileChips"],[data-testid="stFileChip"])){flex-direction:row;flex-wrap:wrap;padding:12px 14px;gap:10px;}
+.st-key-overview_upload [data-testid="stFileUploaderDropzone"]:not(:has([data-testid="stFileChips"],[data-testid="stFileChip"]))::before{width:26px;height:26px;}
+.st-key-overview_upload [data-testid="stFileUploaderDropzone"]:not(:has([data-testid="stFileChips"],[data-testid="stFileChip"]))::after{content:none;}
+/* uploaded file: name wraps instead of being cut */
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"]:has([data-testid="stFileChips"],[data-testid="stFileChip"]){flex-direction:row;align-items:center;padding:10px 12px;gap:8px;text-align:left;}
+[data-testid="stSidebar"] [data-testid="stFileChipName"],[data-testid="stSidebar"] [data-testid="stFileUploaderFileName"]{white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere;word-break:break-word;font-size:13px;font-weight:600;color:var(--ink);}
+[data-testid="stSidebar"] [data-testid="stFileUploaderFile"]{background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:6px 10px;}
+[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"]>div:has([data-testid="stFileChips"],[data-testid="stFileChip"]){display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;justify-content:space-between;gap:8px;width:100%;min-width:0;}
+[data-testid="stSidebar"] [data-testid="stFileChips"]{flex:1 1 auto;min-width:0;flex-direction:row!important;align-items:center;gap:6px;width:100%;}
+[data-testid="stSidebar"] [data-testid="stFileChips"]>div:first-child{flex:1 1 auto;min-width:0;}
+[data-testid="stSidebar"] [data-testid="stFileChips"]>button{flex:none;}
+.up-status{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;line-height:1.5;color:var(--muted);overflow-wrap:anywhere;}
+.up-status i{width:18px;height:18px;border-radius:50%;flex:none;margin-top:1px;font-style:normal;font-size:11px;font-weight:700;display:inline-grid;place-items:center;color:#fff;background:var(--sec);}
+.up-status small{display:block;font-size:12px;font-weight:500;color:var(--muted);overflow-wrap:anywhere;word-break:break-word;}
+.up-status.ok{color:var(--ink);font-weight:600;}
+.up-status.warn i{background:var(--ink);}
+.up-status.idle i{background:transparent;color:var(--muted);border:1px solid var(--line);}
 /* ── cards (plain keyed containers; no thin default border) ── */
 [class*="st-key-card-"]{background:var(--bg);border:1px solid rgba(206,211,220,.55);border-radius:26px;padding:22px 24px;box-shadow:var(--raise);box-sizing:border-box;min-width:0;}
 [data-testid="stHorizontalBlock"]{align-items:stretch!important;gap:28px!important;}
 [data-testid="stHorizontalBlock"]:has(>[data-testid="stColumn"]:nth-child(2):last-child){gap:32px!important;}
 .block-container>[data-testid="stVerticalBlock"],[data-testid="stMainBlockContainer"]>[data-testid="stVerticalBlock"]{gap:28px;}
-.st-key-page-top{gap:16px;}
+.st-key-page-top{gap:20px;}
 [data-testid="stColumn"]{min-width:0;}
 [data-testid="stColumn"]>[data-testid="stVerticalBlock"]{flex:1 1 auto;}
 [data-testid="stColumn"]>[data-testid="stVerticalBlock"]>*:only-child{flex:1 1 auto;display:flex;flex-direction:column;}
@@ -124,8 +214,8 @@ a{color:var(--brand);}
 .metric .m-note{font-size:12.5px;color:var(--muted);line-height:1.4;}
 .pill{display:inline-flex;align-items:center;gap:7px;padding:3px 12px 3px 4px;border-radius:999px;background:#EFEAEC;background:color-mix(in srgb,var(--c) 14%,#FCF7F8);border:1px solid color-mix(in srgb,var(--c) 32%,#FCF7F8);color:var(--ink);font-size:12.5px;font-weight:600;line-height:1.3;}
 .pill i{width:19px;height:19px;border-radius:50%;background:var(--c);color:var(--fg,#fff);font-style:normal;font-size:11px;font-weight:700;display:inline-grid;place-items:center;flex:none;}
-.chips{display:flex;flex-wrap:wrap;gap:8px;margin:0;align-items:center;}
-.chip{background:rgba(144,194,231,.38);color:#1F3A4D;border-radius:999px;padding:4px 14px;font-size:13px;font-weight:500;}
+.chips{display:flex;flex-wrap:wrap;gap:12px;margin:0;align-items:center;min-width:0;max-width:100%;}
+.chip{background:rgba(144,194,231,.38);color:#1F3A4D;border-radius:999px;padding:4px 14px;font-size:13px;font-weight:500;line-height:1.5;max-width:100%;min-width:0;box-sizing:border-box;overflow-wrap:anywhere;word-break:break-word;}
 .strip{display:flex;gap:10px;align-items:flex-start;background:rgba(144,194,231,.26);border:1px solid rgba(144,194,231,.75);border-radius:20px;padding:11px 18px;color:var(--ink);font-size:14px;}
 .strip .ico{width:20px;height:20px;border-radius:50%;background:var(--sec);color:#fff;font-size:12px;font-weight:700;display:inline-grid;place-items:center;flex:none;margin-top:2px;}
 .legend-note{font-size:12.5px;color:var(--muted);line-height:1.5;}
@@ -166,8 +256,10 @@ button:focus-visible{outline:3px solid rgba(144,194,231,.95)!important;outline-o
 .block-container>[data-testid="stVerticalBlock"],[data-testid="stMainBlockContainer"]>[data-testid="stVerticalBlock"]{gap:20px;}
 [class*="st-key-card-"]{padding:16px;border-radius:22px;}
 .h-page{font-size:1.3rem;}.metric{min-height:112px;padding:15px;}.metric .m-value{font-size:28px;}}
+@media(max-width:640px){[data-testid="stSidebar"][aria-expanded="true"]{min-width:calc(100vw - 8px)!important;}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;}}
 </style>'''
+CSS = CSS.replace("@@FILTER@@", ICON_FILTER).replace("@@UPLOAD@@", ICON_UPLOAD).replace("@@CLOUD@@", ICON_CLOUD)
 st.markdown(CSS, unsafe_allow_html=True)
 
 
@@ -207,6 +299,26 @@ def metric(label, value, note, tag=None):
 
 def strip(text):
     st.markdown(f'<div class="strip"><span class="ico">i</span><span>{escape(text)}</span></div>', unsafe_allow_html=True)
+
+
+def side_head(kind, title, desc):
+    st.markdown(f'<div class="side-head"><span class="side-ico {kind}"></span><div><div class="side-t">{escape(title)}</div><div class="side-d">{escape(desc)}</div></div></div>', unsafe_allow_html=True)
+
+
+def field_label(text, note=None):
+    extra = f' <small>{escape(note)}</small>' if note else ""
+    st.markdown(f'<div class="field-label">{escape(text)}{extra}</div>', unsafe_allow_html=True)
+
+
+def status_html(kind, text, detail=None):
+    mark = {"ok": "✓", "warn": "!", "idle": "–"}[kind]
+    more = f'<small>{escape(detail)}</small>' if detail else ""
+    return f'<div class="up-status {kind}"><i>{mark}</i><span>{escape(text)}{more}</span></div>'
+
+
+def set_all_tambon(names, value):
+    for n in names:
+        st.session_state[f"tb::{n}"] = value
 
 
 # ── data helpers (unchanged logic) ───────────────────────────────────────────
@@ -417,24 +529,56 @@ def start_demo():
     st.session_state["demo_mode"] = True
 
 
-# ── sidebar skeleton (order: filters → status key → data source) ─────────────
+# ── sidebar skeleton: two sections (filters → data upload) ──────────────────
 with st.sidebar:
-    filter_box = st.container()
-    legend_box = st.container()
-    st.markdown('<div class="side-sep"></div>', unsafe_allow_html=True)
-    data_box = st.container()
+    filter_box = st.container(key="side-filters")
+    data_box = st.container(key="side-upload")
+
+overview_path = BASE / "data" / "burnwise_tambon_overview.csv"
+
+
+def overview_state(file):
+    """Light check of the optional tambon file for the sidebar status line (page logic below is unchanged)."""
+    if file is None:
+        if overview_path.is_file():
+            return "ok", "ใช้ไฟล์ในโฟลเดอร์ data/", "burnwise_tambon_overview.csv"
+        return "idle", "ไม่จำเป็น · ถ้าไม่ใส่ จะสรุปจากข้อมูลรายแปลง", None
+    try:
+        ov = read_csv(io.BytesIO(file.getvalue()))
+    except ValueError as exc:
+        return "warn", f"อ่านไฟล์ไม่สำเร็จ: {exc}", file.name
+    if not {"tambon_name", "burn_pct (%)"}.issubset(ov):
+        return "warn", "ไฟล์ต้องมีคอลัมน์ tambon_name และ burn_pct (%)", file.name
+    return "ok", f"โหลดแล้ว · {len(ov):,} แถว", file.name
+
 
 with data_box:
-    st.markdown('<div class="side-title">ข้อมูลของโครงการ</div>', unsafe_allow_html=True)
-    st.caption("ใส่ CSV ใน data/ บน GitHub หรืออัปโหลดเพื่อดูในเซสชันนี้")
-    uploaded = st.file_uploader("ตารางแปลง burnwise_master_plots.csv", type=["csv"], key="plots_upload")
-    optional_overview = st.file_uploader("ภาพรวมตำบล (ไม่จำเป็น)", type=["csv"], key="overview_upload")
-    demo_toggle = st.toggle("ทดลองหน้าตาด้วยข้อมูลจำลอง", key="demo_mode")
-    demo = demo_toggle and uploaded is None  # an uploaded CSV always wins over demo data
-    if demo_toggle and uploaded is not None:
-        st.caption("มีไฟล์ที่อัปโหลดอยู่ จึงใช้ไฟล์จริงแทนข้อมูลจำลอง")
-    period = st.text_input("ช่วงศึกษาที่ระบุใน notebook", placeholder="เช่น พ.ย. 2568 – ม.ค. 2569")
-    st.caption("ชื่อช่วงศึกษาใช้แสดงประกอบเท่านั้น ไม่ได้กรองวันที่ใน CSV")
+    side_head("upload", "อัปโหลดข้อมูล", "อัปโหลดข้อมูลเพื่อการวิเคราะห์")
+    with st.container(key="fg-plots"):
+        field_label("ข้อมูลรายแปลง")
+        uploaded = st.file_uploader("ตารางแปลง burnwise_master_plots.csv", type=["csv"], key="plots_upload", label_visibility="collapsed")
+        plots_status = st.empty()
+    with st.container(key="fg-overview"):
+        field_label("ภาพรวมตำบล", "(ไม่จำเป็น)")
+        optional_overview = st.file_uploader("ภาพรวมตำบล (ไม่จำเป็น)", type=["csv"], key="overview_upload", label_visibility="collapsed")
+        ov_kind, ov_text, ov_detail = overview_state(optional_overview)
+        st.markdown(status_html(ov_kind, ov_text, ov_detail), unsafe_allow_html=True)
+    with st.container(key="fg-extra"):
+        demo_toggle = st.toggle("ทดลองหน้าตาด้วยข้อมูลจำลอง", key="demo_mode")
+        demo = demo_toggle and uploaded is None  # an uploaded CSV always wins over demo data
+        if demo_toggle and uploaded is not None:
+            st.caption("มีไฟล์ที่อัปโหลดอยู่ จึงใช้ไฟล์จริงแทนข้อมูลจำลอง")
+        field_label("ช่วงศึกษาที่ระบุใน notebook")
+        period = st.text_input("ช่วงศึกษาที่ระบุใน notebook", placeholder="เช่น พ.ย. 2568 – ม.ค. 2569", label_visibility="collapsed")
+        st.caption("ชื่อช่วงศึกษาใช้แสดงประกอบเท่านั้น ไม่ได้กรองวันที่ใน CSV")
+
+
+def filters_wait(msg):
+    """Keeps the filter section visible (with the same heading) while no valid data is loaded."""
+    with filter_box:
+        side_head("filter", "ตัวกรอง", "กรองข้อมูลเพื่อแสดงบนแผนที่และสถิติ")
+        st.caption(msg)
+
 
 # ── top bar: logo + capsule menu + download slot ─────────────────────────────
 top = st.container(key="page-top")
@@ -456,13 +600,23 @@ try:
     elif path.is_file():
         raw = read_csv(path); source_name = "data/burnwise_master_plots.csv"
     else:
+        plots_status.markdown(status_html("idle", "ยังไม่มีไฟล์ · อัปโหลด หรือใส่ CSV ใน data/ บน GitHub"), unsafe_allow_html=True)
+        filters_wait("อัปโหลดข้อมูลรายแปลงก่อน จึงจะใช้ตัวกรองได้")
         with card("start"):
             head("เริ่มต้นใช้งาน BurnWise", "ยังไม่มีข้อมูลแปลงให้แสดง", page=True)
             st.markdown('<ol class="steps"><li>อัปโหลด <b>burnwise_master_plots.csv</b> ทางแถบด้านซ้าย</li><li>หรือเพิ่มไฟล์นี้ในโฟลเดอร์ <b>data</b> ของ GitHub</li><li>หรือดูหน้าตาเว็บก่อนด้วยข้อมูลจำลอง (ไม่ใช่ผลของโครงการ)</li></ol>', unsafe_allow_html=True)
             st.button(":material/science: ทดลองด้วยข้อมูลจำลอง", type="primary", on_click=start_demo)
         st.stop()
     plots, mode, status_table = prepare(raw)
+    if demo:
+        plots_status.markdown(status_html("ok", f"ใช้ข้อมูลจำลอง · {len(plots):,} แถว (ไม่ใช่ผลของโครงการ)"), unsafe_allow_html=True)
+    elif uploaded is not None:
+        plots_status.markdown(status_html("ok", f"โหลดแล้ว · {len(plots):,} แถว", uploaded.name), unsafe_allow_html=True)
+    else:
+        plots_status.markdown(status_html("ok", f"ใช้ไฟล์ในโฟลเดอร์ data/ · {len(plots):,} แถว", "burnwise_master_plots.csv"), unsafe_allow_html=True)
 except StatusError as exc:
+    plots_status.markdown(status_html("warn", "อ่านไฟล์ไม่สำเร็จ · ตรวจค่า burn_status"), unsafe_allow_html=True)
+    filters_wait("แก้ไฟล์ให้ผ่านก่อน จึงจะใช้ตัวกรองได้")
     st.error(str(exc))
     with card("status-diag"):
         head("ค่าใน burn_status ที่พบในไฟล์", "รายการค่าที่ไม่ซ้ำพร้อมจำนวนแถว · ค่าที่ไม่รู้จักถูกหยุดไว้ ไม่ถูกแปลงเป็นสถานะอื่น")
@@ -472,6 +626,8 @@ except StatusError as exc:
         st.caption("ถ้าค่าเหล่านี้มีความหมายตรงกับ Burn / No Burn / Unknown ให้แก้ที่ notebook หรือแจ้งชื่อค่า เพื่อเพิ่ม mapping ใน STATUS_ALIASES")
     st.stop()
 except (ValueError, OSError) as exc:
+    plots_status.markdown(status_html("warn", "อ่านไฟล์ไม่สำเร็จ · ดูข้อความในหน้าหลัก"), unsafe_allow_html=True)
+    filters_wait("แก้ไฟล์ให้ผ่านก่อน จึงจะใช้ตัวกรองได้")
     st.error(str(exc)); st.stop()
 
 if mode == "modern":
@@ -480,17 +636,42 @@ else:
     order = ["Tier เขียว (เดิม)", "Tier เหลือง (เดิม)", "Tier แดง (เดิม)", "ข้อมูลไม่เพียงพอ"]
     colors = dict(zip(order, [S_GREEN, S_AMBER, S_RED, S_GREY]))
 
-# ── sidebar: filters + status key ────────────────────────────────────────────
+# ── sidebar: filters (tambon picker + status checkboxes + collapsible key) ───
 with filter_box:
-    st.markdown('<div class="side-title">ตัวกรอง</div>', unsafe_allow_html=True)
+    side_head("filter", "ตัวกรอง", "กรองข้อมูลเพื่อแสดงบนแผนที่และสถิติ")
     names = sorted(plots["tambon_name"].unique())
-    selected_names = st.multiselect("ตำบล", names, default=names)
-    st.caption(f"เลือก {len(selected_names)} จาก {len(names)} ตำบล")
-    selected_status = st.multiselect("สถานะ", order, default=order)
-with legend_box:
-    st.markdown('<div class="side-title">สัญลักษณ์สถานะข้อมูล</div>', unsafe_allow_html=True)
-    st.markdown('<div class="legend-stack">' + "".join(status_pill(s) for s in order) + '</div>', unsafe_allow_html=True)
-    st.markdown('<div class="legend-note">สีแดงเข้มของโลโก้ เมนู และปุ่มเป็นสีแบรนด์ ไม่ใช่การแจ้งเตือนการเผา สถานะข้อมูลแสดงด้วยป้ายพร้อมไอคอนข้างต้นเสมอ</div>', unsafe_allow_html=True)
+    # Checkboxes use value=True (not session_state pre-seeding): popover content is mounted lazily, so a frontend that never
+    # saw the widget must fall back to the same default the backend uses, or the list would look unchecked after a rerun.
+    n_sel = sum(bool(st.session_state.get(f"tb::{n}", True)) for n in names)
+    if n_sel == len(names):
+        tambon_label = f"เลือกทั้งหมด · {len(names)} ตำบล"
+    elif n_sel == 0:
+        tambon_label = "ยังไม่ได้เลือกตำบล"
+    else:
+        tambon_label = f"เลือก {n_sel} จาก {len(names)} ตำบล"
+    with st.container(key="fg-tambon"):
+        field_label("ตำบล")
+        with st.popover(tambon_label, icon=":material/location_on:"):
+            c_all, c_none = st.columns(2)
+            c_all.button("เลือกทั้งหมด", key="tb-all", on_click=set_all_tambon, args=(names, True))
+            c_none.button("ล้างที่เลือก", key="tb-none", on_click=set_all_tambon, args=(names, False))
+            st.caption(f"เลือก {n_sel} จาก {len(names)} ตำบล")
+            with st.container(height=min(38 * len(names) + 12, 300), border=False):
+                for n in names:
+                    st.checkbox(n, value=True, key=f"tb::{n}")
+    selected_names = [n for n in names if st.session_state.get(f"tb::{n}", True)]
+
+    with st.container(key="fg-status"):
+        field_label("สถานะ")
+        with st.container(key="statuslist"):
+            for i, s in enumerate(order):
+                st.checkbox(f":material/{STATUS_MAT.get(s, 'circle')}: {s}", value=True, key=f"chk-{mode}-{i}")
+    selected_status = [s for i, s in enumerate(order) if st.session_state.get(f"chk-{mode}-{i}", True)]
+    st.markdown("<style>" + "".join(f'.st-key-chk-{mode}-{i} label span[role="img"]{{background:{colors[s]};color:{fg_for(colors[s])};}}' for i, s in enumerate(order)) + "</style>", unsafe_allow_html=True)
+
+    with st.expander(":material/info: คำอธิบายสถานะ"):
+        st.markdown('<div class="legend-list">' + "".join(f'<div class="legend-row">{status_pill(s)}<span>{escape(LEGEND_TEXT.get(s, ""))}</span></div>' for s in order)
+                    + '<div class="legend-note">สีแดงเข้มของโลโก้ เมนู และปุ่มเป็นสีแบรนด์ ไม่ใช่การแจ้งเตือนการเผา สถานะข้อมูลแสดงด้วยป้ายพร้อมไอคอนเสมอ</div></div>', unsafe_allow_html=True)
 
 # ── notices ──────────────────────────────────────────────────────────────────
 with top:
@@ -502,10 +683,10 @@ with top:
         strip("ผลจากดาวเทียมเบื้องต้น · No Burn = ไม่เข้าเกณฑ์ตรวจพบ ไม่ใช่หลักฐานยืนยันว่าไม่เผาหรือไถกลบ")
     rows_chip = f"{'ข้อมูลจำลอง' if demo else 'โหลดแล้ว'} {len(plots):,} แถว"
     st.markdown(f'<div class="chips"><span class="chip">{rows_chip}</span><span class="chip">แหล่งข้อมูล: {escape(source_name)}</span><span class="chip">{("ช่วงศึกษา: " + escape(period)) if period else "ยังไม่ได้ระบุช่วงศึกษา"}</span></div>', unsafe_allow_html=True)
-if status_table is not None and not demo:
-    with st.expander(f"ตรวจค่า burn_status จากไฟล์ ({len(plots):,} แถว)"):
-        st.caption("ค่าดิบทุกค่าในไฟล์ พร้อมสถานะมาตรฐานที่เว็บใช้ · ค่าดิบเก็บไว้ในคอลัมน์ burn_status_original")
-        st.dataframe(status_table, hide_index=True, width="stretch")
+    if status_table is not None and not demo:
+        with st.expander(f"ตรวจค่า burn_status จากไฟล์ ({len(plots):,} แถว)"):
+            st.caption("ค่าดิบทุกค่าในไฟล์ พร้อมสถานะมาตรฐานที่เว็บใช้ · ค่าดิบเก็บไว้ในคอลัมน์ burn_status_original")
+            st.dataframe(status_table, hide_index=True, width="stretch")
 
 f = plots[plots["tambon_name"].isin(selected_names) & plots["display_status"].isin(selected_status)].copy()
 if f.empty:
@@ -535,7 +716,6 @@ if page == "ภาพรวม":
     with right, card("tambon-burn"):
         head("สัดส่วนสัญญาณเผารายตำบล")
         overview = None
-        overview_path = BASE / "data" / "burnwise_tambon_overview.csv"
         if not demo and (optional_overview is not None or overview_path.is_file()):
             try:
                 overview = read_csv(io.BytesIO(optional_overview.getvalue()) if optional_overview else overview_path)
