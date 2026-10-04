@@ -1,0 +1,2 @@
+﻿n_plots,TN,FP,FN,TP,Accuracy,Precision,Recall,F1,plot_label_IoU,comparison_type,validation_start,validation_end_exclusive,support,n_plots_total,n_excluded,reference_files
+38159,20901,7026,1635,8597,0.7730286433082628,0.5502784356397619,0.8402071931196247,0.6650164378263392,0.4981457874608877,external_product_agreement,2026-01-01,2026-02-01,same valid cropland pixels; 10m UTM grid; pixel centers,47311,9152,gistda\Burned_S2_20260101_20260131_thailand.shp
