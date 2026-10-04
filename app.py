@@ -229,7 +229,7 @@ overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior:contai
 [data-testid="stCaptionContainer"],[data-testid="stCaptionContainer"] p{color:var(--muted)!important;font-size:13px;}
 a{color:var(--brand);}
 /* ── metric cards: left-aligned, equal height ── */
-.metric{background:var(--bg);border:1px solid rgba(206,211,220,.55);border-radius:24px;padding:18px 20px;min-height:128px;box-shadow:var(--raise);display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:6px;box-sizing:border-box;text-align:left;}
+.metric{background:var(--bg);border:1px solid rgba(206,211,220,.55);border-radius:24px;padding:20px 22px;min-height:128px;height:100%;box-shadow:var(--raise);display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:6px;box-sizing:border-box;text-align:left;}
 .metric .m-top{min-height:28px;display:flex;align-items:center;}
 .metric .m-label{font-size:13.5px;color:var(--muted);font-weight:600;line-height:1.3;}
 .metric .m-value{font-size:34px;font-weight:700;line-height:1.1;color:var(--ink);}
@@ -281,11 +281,22 @@ button:focus-visible{outline:3px solid rgba(144,194,231,.95)!important;outline-o
 .h-page{font-size:1.3rem;}.metric{min-height:112px;padding:15px;}.metric .m-value{font-size:28px;}}
 @media(max-width:640px){[data-testid="stSidebar"][aria-expanded="true"]{min-width:calc(100vw - 8px)!important;}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;}}
-/* ── metric-card grid: explicit grid (not stColumns flex) so 4 cards go 4→2×2→1 cleanly, never 3+1 ── */
-[class*="st-key-metrics-"]>[data-testid="stVerticalBlock"]{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;}
-@media(max-width:1100px){[class*="st-key-metrics-"]>[data-testid="stVerticalBlock"]{grid-template-columns:repeat(2,1fr);gap:20px;}}
-@media(max-width:560px){[class*="st-key-metrics-"]>[data-testid="stVerticalBlock"]{grid-template-columns:1fr;}}
-[class*="st-key-metrics-"] [data-testid="stElementContainer"]{min-width:0;}
+/* ── metric-card rows: real st.columns() inside a keyed wrapper, forced nowrap+equal-shrink on desktop so
+   4 (or 3) cards always sit in one row regardless of sidebar open/closed — wrapping only ever happens at the
+   two explicit breakpoints below, which key off viewport width, not the sidebar-dependent content width. ── */
+[class*="st-key-row-"] [data-testid="stHorizontalBlock"]{flex-wrap:nowrap!important;gap:24px!important;row-gap:24px!important;}
+[class*="st-key-row-"] [data-testid="stColumn"]{flex:1 1 0!important;min-width:0!important;width:auto!important;}
+@media(max-width:1100px){
+  [class*="st-key-row-4up"] [data-testid="stHorizontalBlock"]{flex-wrap:wrap!important;}
+  [class*="st-key-row-4up"] [data-testid="stColumn"]{flex:1 1 calc(50% - 12px)!important;}
+  /* the 3-card evaluation-scope row goes straight from one row to fully stacked — never an uneven 2+1 */
+  [class*="st-key-row-3up"] [data-testid="stHorizontalBlock"]{flex-wrap:wrap!important;}
+  [class*="st-key-row-3up"] [data-testid="stColumn"]{flex:1 1 100%!important;}
+}
+@media(max-width:640px){
+  [class*="st-key-row-"] [data-testid="stHorizontalBlock"]{flex-wrap:wrap!important;}
+  [class*="st-key-row-"] [data-testid="stColumn"]{flex:1 1 100%!important;}
+}
 /* ── comparison table (GISTDA confusion matrix) ── */
 .cm-wrap{overflow-x:auto;}
 .cm-table{border-collapse:separate;border-spacing:0;width:100%;font-size:13.5px;}
@@ -922,9 +933,10 @@ if page == "ภาพรวม":
                  ("พื้นที่รวม (ไร่)", f"{f['plot_area_rai'].sum():,.0f}", "ผลรวมพื้นที่แปลงตาม CSV", None),
                  ("Tier แดง (เดิม)", int(f["display_status"].eq("Tier แดง (เดิม)").sum()), "กลุ่มจากตรรกะเดิม ไม่ยืนยันว่าเผา", (STATUS_ICON["Tier แดง (เดิม)"], colors["Tier แดง (เดิม)"])),
                  ("ข้อมูลไม่เพียงพอ", int(f["display_status"].eq("ข้อมูลไม่เพียงพอ").sum()), "แยกจากกลุ่มที่จัดสถานะได้", (STATUS_ICON["ข้อมูลไม่เพียงพอ"], colors["ข้อมูลไม่เพียงพอ"]))]
-    with st.container(key="metrics-overview"):
-        for label, value, note, tag in cards:
-            metric(label, f"{value:,}" if isinstance(value, int) else value, note, tag)
+    with st.container(key="row-4up-overview"):
+        for col, (label, value, note, tag) in zip(st.columns(4), cards):
+            with col:
+                metric(label, f"{value:,}" if isinstance(value, int) else value, note, tag)
     left, right = st.columns([1.1, 1])
     with left, card("tambon-status"):
         head("สถานะรายตำบล", "สัดส่วนจำนวนแปลงในตัวกรอง รวมกลุ่มข้อมูลไม่พอ")
@@ -1019,14 +1031,18 @@ elif page == "คุณภาพข้อมูล":
     val_metrics, val_metrics_err = load_validation_metrics()
     n_excluded_val = int(val_metrics["n_excluded"]) if val_metrics else None
     head("คุณภาพข้อมูลและจุดที่ต้องตรวจสอบ", "สัดส่วนภาพใช้ได้และเหตุผลที่แปลงถูกจัดเป็นข้อมูลไม่เพียงพอ ก่อนเชื่อผลใด ๆ ควรตรวจหน้านี้ก่อน", page=True)
-    with st.container(key="metrics-quality"):
-        metric("ข้อมูลไม่เพียงพอ", f"{len(unknown):,}", "แปลงที่ยังไม่ควรสรุปสถานะ (ในตัวกรองปัจจุบัน)", (STATUS_ICON["ข้อมูลไม่เพียงพอ"], colors["ข้อมูลไม่เพียงพอ"]))
-        metric("ไม่มีระยะทางถนน", f"{f['distance_to_collection_km'].isna().sum():,}", "ไม่แทนระยะทางที่หายด้วยศูนย์", ("!", S_AMBER))
-        metric("ไม่มี Access Gap", f"{f['access_gap_index'].isna().sum():,}", "ตรวจข้อมูลประกอบก่อนจัดลำดับ", ("!", S_AMBER))
-        if n_excluded_val is not None:
-            metric("ตัดออกจากผลประเมิน GISTDA", f"{n_excluded_val:,}", "คนละเงื่อนไขกับ \u201cข้อมูลไม่เพียงพอ\u201d ด้านบน · ดูหน้าผลประเมิน", ("!", S_GREY))
-        else:
-            metric("ตัดออกจากผลประเมิน GISTDA", "ไม่ทราบ", val_metrics_err or "ไม่มีไฟล์ผลประเมิน", ("?", S_GREY))
+    quality_cards = [
+        ("ข้อมูลไม่เพียงพอ", f"{len(unknown):,}", "แปลงที่ยังไม่ควรสรุปสถานะ (ในตัวกรองปัจจุบัน)", (STATUS_ICON["ข้อมูลไม่เพียงพอ"], colors["ข้อมูลไม่เพียงพอ"])),
+        ("ไม่มีระยะทางถนน", f"{f['distance_to_collection_km'].isna().sum():,}", "ไม่แทนระยะทางที่หายด้วยศูนย์", ("!", S_AMBER)),
+        ("ไม่มี Access Gap", f"{f['access_gap_index'].isna().sum():,}", "ตรวจข้อมูลประกอบก่อนจัดลำดับ", ("!", S_AMBER)),
+        ("ตัดออกจากผลประเมิน GISTDA", f"{n_excluded_val:,}", "คนละเงื่อนไขกับ \u201cข้อมูลไม่เพียงพอ\u201d ด้านบน · ดูหน้าผลประเมิน", ("!", S_GREY))
+        if n_excluded_val is not None else
+        ("ตัดออกจากผลประเมิน GISTDA", "ไม่ทราบ", val_metrics_err or "ไม่มีไฟล์ผลประเมิน", ("?", S_GREY)),
+    ]
+    with st.container(key="row-4up-quality"):
+        for col, (label, value, note, tag) in zip(st.columns(4), quality_cards):
+            with col:
+                metric(label, value, note, tag)
     left, right = st.columns(2)
     with left, card("coverage"):
         head("Coverage" if mode == "modern" else "สัดส่วน valid_observation_pct เดิม", "การกระจายตัวของ valid_observation_pct")
@@ -1093,18 +1109,24 @@ elif page == "ผลประเมิน":
 
     if val_metrics is not None:
         pct = lambda key: f"{val_metrics[key] * 100:.1f}%"
-        with st.container(key="metrics-eval"):
-            metric("Accuracy", pct("Accuracy"), "สัดส่วนที่ตรงกันทั้ง Burn และ No Burn", None)
-            metric("Precision", pct("Precision"), "ในแปลงที่ BurnWise ชี้ว่าเผา ตรงกับ GISTDA กี่ %", None)
-            metric("Recall", pct("Recall"), "ในแปลงที่ GISTDA ชี้ว่าเผา BurnWise จับได้กี่ %", None)
-            metric("F1", pct("F1"), "ค่าเฉลี่ยถ่วงน้ำหนักของ Precision/Recall", None)
+        eval_cards = [("Accuracy", pct("Accuracy"), "สัดส่วนที่ตรงกันทั้ง Burn และ No Burn", None),
+                      ("Precision", pct("Precision"), "ในแปลงที่ BurnWise ชี้ว่าเผา ตรงกับ GISTDA กี่ %", None),
+                      ("Recall", pct("Recall"), "ในแปลงที่ GISTDA ชี้ว่าเผา BurnWise จับได้กี่ %", None),
+                      ("F1", pct("F1"), "ค่าเฉลี่ยถ่วงน้ำหนักของ Precision/Recall", None)]
+        with st.container(key="row-4up-eval"):
+            for col, (label, value, note, tag) in zip(st.columns(4), eval_cards):
+                with col:
+                    metric(label, value, note, tag)
         with card("eval-scope"):
             head("ขอบเขตการประเมินรอบนี้")
             vstart, vend = val_metrics.get("validation_start"), val_metrics.get("validation_end_exclusive")
-            e1, e2, e3 = st.columns(3)
-            with e1: metric("แปลงทั้งหมด", f"{int(val_metrics['n_plots_total']):,}", "ก่อนตัดแปลงที่เปรียบเทียบไม่ได้", None)
-            with e2: metric("ใช้ประเมินจริง", f"{int(val_metrics['n_plots']):,}", "TN+FP+FN+TP รวมกัน", None)
-            with e3: metric("ตัดออก", f"{int(val_metrics['n_excluded']):,}", "เช่น ไม่มีภาพ/ไม่มี cropland ในช่วงเทียบ", None)
+            scope_cards = [("แปลงทั้งหมด", f"{int(val_metrics['n_plots_total']):,}", "ก่อนตัดแปลงที่เปรียบเทียบไม่ได้", None),
+                           ("ใช้ประเมินจริง", f"{int(val_metrics['n_plots']):,}", "TN+FP+FN+TP รวมกัน", None),
+                           ("ตัดออก", f"{int(val_metrics['n_excluded']):,}", "เช่น ไม่มีภาพ/ไม่มี cropland ในช่วงเทียบ", None)]
+            with st.container(key="row-3up-evalscope"):
+                for col, (label, value, note, tag) in zip(st.columns(3), scope_cards):
+                    with col:
+                        metric(label, value, note, tag)
             st.caption(f"ช่วงเทียบ: {vstart} ถึงก่อนวันที่ {vend} (ไม่รวมวันสิ้นสุด) · เกณฑ์เทียบ: {val_metrics.get('support', 'ไม่ระบุ')}")
             st.caption(f"ไฟล์อ้างอิงฝั่ง GISTDA: {val_metrics.get('reference_files', 'ไม่ระบุ')} · ประเภทการเทียบ: {val_metrics.get('comparison_type', 'ไม่ระบุ')}")
             st.caption(f"plot_label_IoU รวม = {val_metrics['plot_label_IoU']*100:.1f}% — นี่คือ IoU ของ \u201cชุดแปลงที่จัดเป็น Burn\u201d (เทียบชุดแปลง) ไม่ใช่ spatial IoU ของพื้นที่ไหม้จริงบนแผนที่")
