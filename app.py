@@ -737,10 +737,26 @@ with st.sidebar:
 overview_path = DATA_DIR / "burnwise_tambon_overview.csv"
 
 
+def _is_blank_file(path):
+    """True if an optional file is empty or whitespace-only (e.g. a stray 1–2 byte CRLF left on disk).
+    An optional file like this should behave exactly as if it were never provided — no warning, same
+    fallback as a missing file — rather than surfacing a 'CSV ว่าง' error for something the user never
+    actually filled in."""
+    try:
+        size = path.stat().st_size
+        if size == 0:
+            return True
+        if size > 4096:
+            return False
+        return not path.read_bytes().strip()
+    except OSError:
+        return False
+
+
 def overview_state(file):
     """Light check of the optional tambon file for the sidebar status line (page logic below is unchanged)."""
     if file is None:
-        if overview_path.is_file():
+        if overview_path.is_file() and not _is_blank_file(overview_path):
             return "ok", "ใช้ไฟล์ในโฟลเดอร์ data/", "burnwise_tambon_overview.csv"
         return "idle", "ไม่จำเป็น · ถ้าไม่ใส่ จะสรุปจากข้อมูลรายแปลง", None
     try:
@@ -917,7 +933,7 @@ if page == "ภาพรวม":
     with right, card("tambon-burn"):
         head("สัดส่วนสัญญาณเผารายตำบล")
         overview = None
-        if not demo and (optional_overview is not None or overview_path.is_file()):
+        if not demo and (optional_overview is not None or (overview_path.is_file() and not _is_blank_file(overview_path))):
             try:
                 overview = read_csv(io.BytesIO(optional_overview.getvalue()) if optional_overview else overview_path)
                 if not {"tambon_name", "burn_pct (%)"}.issubset(overview):
