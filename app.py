@@ -16,6 +16,7 @@ in the sidebar only overrides the main plot table for the current session.
 """
 from pathlib import Path
 from html import escape
+import gzip
 import io
 import re
 import unicodedata
@@ -429,18 +430,45 @@ def normalize_status(frame):
     return frame, summary
 
 
+GZIP_MAGIC = b"\x1f\x8b"
+
+
+def _open_source(source):
+    """Open source as a binary file-like positioned at byte 0, and sniff whether it's actually gzip —
+    by content, not by filename. A '.csv.gz' that reached GitHub without being tracked as binary (missing
+    `*.gz binary` in .gitattributes) commonly gets its line endings rewritten on commit/checkout, so the
+    extension says gzip but the bytes on disk are plain CSV text; trusting the extension there raises a
+    cryptic 'Not a gzipped file' error instead of just reading the data. We open once, peek 2 bytes, decide,
+    and rewind — works the same way for an uploaded file object and a path on disk."""
+    opened_here = isinstance(source, (str, Path))
+    buf = open(source, "rb") if opened_here else source
+    if hasattr(buf, "seek"):
+        buf.seek(0)
+    prefix = buf.read(2)
+    buf.seek(0)
+    compression = "gzip" if prefix == GZIP_MAGIC else None
+    return buf, compression, opened_here
+
+
 def read_csv(source):
-    """Read a CSV; clean header names (BOM, spaces, case of known names) and keep leading zeroes in IDs."""
+    """Read a CSV (gzip or plain, detected by content); clean header names (BOM, spaces, case of known
+    names) and keep leading zeroes in IDs."""
+    buf, compression, opened_here = _open_source(source)
     try:
-        header = pd.read_csv(source, encoding="utf-8-sig", nrows=0)
-        if hasattr(source, "seek"):
-            source.seek(0)
+        header = pd.read_csv(buf, encoding="utf-8-sig", nrows=0, compression=compression)
+        buf.seek(0)
         id_cols = [c for c in header.columns if col_key(c) in ("plot_id", "tambon_id")]
-        frame = pd.read_csv(source, encoding="utf-8-sig", dtype={c: "string" for c in id_cols})
+        frame = pd.read_csv(buf, encoding="utf-8-sig", dtype={c: "string" for c in id_cols}, compression=compression)
     except pd.errors.EmptyDataError:
         raise ValueError("CSV ว่าง: ส่งออกไฟล์จาก notebook ใหม่ก่อนนำมาใช้") from None
-    except (UnicodeDecodeError, pd.errors.ParserError):
-        raise ValueError("อ่าน CSV ไม่ได้ กรุณาส่งออกเป็น UTF-8 CSV จาก notebook") from None
+    except (UnicodeDecodeError, pd.errors.ParserError, EOFError, gzip.BadGzipFile) as exc:
+        hint = " (ไฟล์มีนามสกุล .gz แต่เนื้อไฟล์ไม่ใช่ gzip จริง — ถ้าอัปโหลดผ่าน GitHub ตรวจว่ามี *.gz binary ใน .gitattributes หรือใช้ .csv ธรรมดาแทน)" if compression == "gzip" else ""
+        raise ValueError(f"อ่าน CSV ไม่ได้ กรุณาส่งออกเป็น UTF-8 CSV จาก notebook{hint} ({exc})") from None
+    except OSError as exc:
+        raise ValueError(f"เปิดไฟล์ไม่ได้: {exc}") from None
+    finally:
+        if opened_here:
+            buf.close()
     known = {col_key(k): k for k in KNOWN_COLUMNS}
     frame.columns = [known.get(col_key(c), clean_text(c)) for c in frame.columns]
     if frame.columns.duplicated().any():
