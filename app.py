@@ -431,6 +431,7 @@ def normalize_status(frame):
 
 
 GZIP_MAGIC = b"\x1f\x8b"
+LFS_POINTER_PREFIX = b"version https://git-lfs.github.com/spec/v1"
 
 
 def _open_source(source):
@@ -438,29 +439,46 @@ def _open_source(source):
     by content, not by filename. A '.csv.gz' that reached GitHub without being tracked as binary (missing
     `*.gz binary` in .gitattributes) commonly gets its line endings rewritten on commit/checkout, so the
     extension says gzip but the bytes on disk are plain CSV text; trusting the extension there raises a
-    cryptic 'Not a gzipped file' error instead of just reading the data. We open once, peek 2 bytes, decide,
-    and rewind — works the same way for an uploaded file object and a path on disk."""
+    cryptic 'Not a gzipped file' error instead of just reading the data. We open once, peek a small prefix
+    (also used to recognise a Git LFS pointer file — see read_csv), decide, and rewind — works the same way
+    for an uploaded file object and a path on disk."""
     opened_here = isinstance(source, (str, Path))
     buf = open(source, "rb") if opened_here else source
     if hasattr(buf, "seek"):
         buf.seek(0)
-    prefix = buf.read(2)
+    prefix = buf.read(64)
     buf.seek(0)
-    compression = "gzip" if prefix == GZIP_MAGIC else None
-    return buf, compression, opened_here
+    compression = "gzip" if prefix[:2] == GZIP_MAGIC else None
+    return buf, compression, opened_here, prefix
 
 
 def read_csv(source):
     """Read a CSV (gzip or plain, detected by content); clean header names (BOM, spaces, case of known
     names) and keep leading zeroes in IDs."""
-    buf, compression, opened_here = _open_source(source)
+    buf, compression, opened_here, prefix = _open_source(source)
+    size = None
+    if opened_here:
+        try:
+            size = Path(source).stat().st_size
+        except OSError:
+            size = None
     try:
+        if prefix.startswith(LFS_POINTER_PREFIX):
+            raise ValueError(
+                "ไฟล์นี้เป็น Git LFS pointer (ไฟล์จริงไม่ถูกดึงมาด้วย) ไม่ใช่ข้อมูล CSV — มักเกิดเมื่อไฟล์ถูก track ด้วย Git LFS แต่ "
+                "โฮสต์ที่ deploy (เช่น Streamlit Community Cloud) ไม่ได้ดึงไฟล์ LFS จริงมาด้วย ได้แค่ไฟล์ pointer เล็ก ๆ แทน · "
+                "วิธีแก้: เอาไฟล์นี้ออกจาก Git LFS tracking (ลบออกจาก .gitattributes ถ้ามีบรรทัด filter=lfs ของไฟล์นี้) แล้ว "
+                "commit ไฟล์จริงแบบ binary ปกติแทน (ไฟล์ขนาดนี้ยังเล็กกว่าขีดจำกัด 100MB ของ GitHub แบบไม่ใช้ LFS)"
+            )
+        if size == 0:
+            raise ValueError("ไฟล์มีอยู่จริงแต่ขนาด 0 ไบต์ (ว่างเปล่าสนิท) — อัปโหลด/commit ไฟล์ไม่สำเร็จหรือไฟล์ถูกเขียนทับด้วยไฟล์ว่าง ลองอัปโหลดใหม่")
         header = pd.read_csv(buf, encoding="utf-8-sig", nrows=0, compression=compression)
         buf.seek(0)
         id_cols = [c for c in header.columns if col_key(c) in ("plot_id", "tambon_id")]
         frame = pd.read_csv(buf, encoding="utf-8-sig", dtype={c: "string" for c in id_cols}, compression=compression)
     except pd.errors.EmptyDataError:
-        raise ValueError("CSV ว่าง: ส่งออกไฟล์จาก notebook ใหม่ก่อนนำมาใช้") from None
+        size_note = f" (ไฟล์ขนาด {size:,} ไบต์)" if size is not None else ""
+        raise ValueError(f"CSV ว่าง: ส่งออกไฟล์จาก notebook ใหม่ก่อนนำมาใช้{size_note}") from None
     except (UnicodeDecodeError, pd.errors.ParserError, EOFError, gzip.BadGzipFile) as exc:
         hint = " (ไฟล์มีนามสกุล .gz แต่เนื้อไฟล์ไม่ใช่ gzip จริง — ถ้าอัปโหลดผ่าน GitHub ตรวจว่ามี *.gz binary ใน .gitattributes หรือใช้ .csv ธรรมดาแทน)" if compression == "gzip" else ""
         raise ValueError(f"อ่าน CSV ไม่ได้ กรุณาส่งออกเป็น UTF-8 CSV จาก notebook{hint} ({exc})") from None
