@@ -3,6 +3,16 @@
 Soft UI theme: palette #FCF7F8 / #CED3DC / #A31621 (brand) / #4E8098 / #90C2E7.
 Brand red is decoration (logo, menu, buttons, key numbers). Data status colours
 (red / green / amber) are separate and always come with an icon + text label.
+
+Data files (place under data/ next to this file in the repo):
+  - burnwise_master_plots_with_measures_last1.csv.gz  (required — main plot table)
+  - burnwise_gistda_validation_metrics.csv            (optional — enables "ผลประเมิน")
+  - burnwise_gistda_confusion_matrix.csv              (optional — enables "ผลประเมิน")
+  - burnwise_gistda_validation_tambon.csv             (optional — enables "ผลประเมิน")
+  - burnwise_gistda_validation_plots.csv              (optional — enables mismatch explorer)
+  - burnwise_tambon_overview.csv                      (optional — legacy tambon overview chart)
+The site loads these automatically on open; no upload is required. Uploading a CSV
+in the sidebar only overrides the main plot table for the current session.
 """
 from pathlib import Path
 from html import escape
@@ -17,6 +27,18 @@ import streamlit as st
 
 st.set_page_config(page_title="BurnWise · ท่าตะโก", page_icon="🔥", layout="wide", initial_sidebar_state="expanded")
 BASE = Path(__file__).resolve().parent
+DATA_DIR = BASE / "data"
+
+# ── data file names (edit here if a filename changes between pipeline rounds) ──
+MASTER_PLOTS_CANDIDATES = ["burnwise_master_plots_with_measures_last1.csv.gz", "burnwise_master_plots.csv"]
+VALID_METRICS_FILE = DATA_DIR / "burnwise_gistda_validation_metrics.csv"
+VALID_CONFUSION_FILE = DATA_DIR / "burnwise_gistda_confusion_matrix.csv"
+VALID_TAMBON_FILE = DATA_DIR / "burnwise_gistda_validation_tambon.csv"
+VALID_PLOTS_FILE = DATA_DIR / "burnwise_gistda_validation_plots.csv"
+
+# NOTE — current-round data limitation only (not a permanent pipeline characteristic):
+# re-check / update or remove this note whenever the GISTDA validation round changes.
+CURRENT_ROUND_IMAGE_NOTE = "ภาพก่อนเก็บเกี่ยว (pre) ใช้ได้ 2 ภาพ · ภาพหลังเก็บเกี่ยว (post) ใช้ได้ 12 ภาพ"
 
 # ── Brand palette (decoration) ───────────────────────────────────────────────
 BG, LINE, BRAND, SEC, SKY = "#FCF7F8", "#CED3DC", "#A31621", "#4E8098", "#90C2E7"
@@ -46,8 +68,8 @@ LEGEND_TEXT = {"ตรวจพบสัญญาณเผา": "พบสัญ
                "ข้อมูลไม่เพียงพอ": "ข้อมูลสังเกตไม่เพียงพอ แยกจากกลุ่มที่จัดสถานะได้",
                "Tier เขียว (เดิม)": "กลุ่มจากตรรกะเดิม ไม่ยืนยันว่าเผา", "Tier เหลือง (เดิม)": "กลุ่มจากตรรกะเดิม ไม่ยืนยันว่าเผา",
                "Tier แดง (เดิม)": "กลุ่มจากตรรกะเดิม ไม่ยืนยันว่าเผา"}
-PAGES = ["ภาพรวม", "สำรวจแปลง", "คุณภาพข้อมูล", "เกี่ยวกับโครงการ"]
-PAGE_ICON = {"ภาพรวม": "space_dashboard", "สำรวจแปลง": "map", "คุณภาพข้อมูล": "fact_check", "เกี่ยวกับโครงการ": "info"}
+PAGES = ["ภาพรวม", "สำรวจแปลง", "คุณภาพข้อมูล", "ผลประเมิน", "เกี่ยวกับโครงการ"]
+PAGE_ICON = {"ภาพรวม": "space_dashboard", "สำรวจแปลง": "map", "คุณภาพข้อมูล": "fact_check", "ผลประเมิน": "verified", "เกี่ยวกับโครงการ": "info"}
 
 CSS = '''<style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&display=swap');
@@ -258,6 +280,21 @@ button:focus-visible{outline:3px solid rgba(144,194,231,.95)!important;outline-o
 .h-page{font-size:1.3rem;}.metric{min-height:112px;padding:15px;}.metric .m-value{font-size:28px;}}
 @media(max-width:640px){[data-testid="stSidebar"][aria-expanded="true"]{min-width:calc(100vw - 8px)!important;}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;}}
+/* ── metric-card grid: explicit grid (not stColumns flex) so 4 cards go 4→2×2→1 cleanly, never 3+1 ── */
+[class*="st-key-metrics-"]>[data-testid="stVerticalBlock"]{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;}
+@media(max-width:1100px){[class*="st-key-metrics-"]>[data-testid="stVerticalBlock"]{grid-template-columns:repeat(2,1fr);gap:20px;}}
+@media(max-width:560px){[class*="st-key-metrics-"]>[data-testid="stVerticalBlock"]{grid-template-columns:1fr;}}
+[class*="st-key-metrics-"] [data-testid="stElementContainer"]{min-width:0;}
+/* ── comparison table (GISTDA confusion matrix) ── */
+.cm-wrap{overflow-x:auto;}
+.cm-table{border-collapse:separate;border-spacing:0;width:100%;font-size:13.5px;}
+.cm-table th,.cm-table td{padding:10px 14px;text-align:center;border:1px solid var(--line);}
+.cm-table thead th{background:#EFEAEC;color:var(--ink);font-weight:700;}
+.cm-table tbody th{background:#EFEAEC;color:var(--ink);font-weight:700;text-align:left;}
+.cm-table td.match{background:rgba(75,143,109,.14);color:var(--ink);font-weight:700;}
+.cm-table td.mismatch{background:rgba(163,22,33,.08);color:var(--ink);font-weight:700;}
+.cm-corner{background:var(--bg)!important;border:none!important;}
+.badge-group{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0;}
 </style>'''
 CSS = CSS.replace("@@FILTER@@", ICON_FILTER).replace("@@UPLOAD@@", ICON_UPLOAD).replace("@@CLOUD@@", ICON_CLOUD)
 st.markdown(CSS, unsafe_allow_html=True)
@@ -323,9 +360,12 @@ def set_all_tambon(names, value):
 
 # ── data helpers (unchanged logic) ───────────────────────────────────────────
 # ── cleaning + status normalisation ──────────────────────────────────────────
-KNOWN_COLUMNS = ["plot_id", "tambon_id", "tambon_name", "plot_area_rai", "burn_pct", "burn_status", "burn_status_original", "tier",
-                 "valid_observation_pct", "unknown_pct", "distance_to_collection_km", "access_gap_index", "centroid_lat",
-                 "centroid_lon", "tambon_income_baht_year", "exclusion_reason", "priority_group", "needs_verification"]
+KNOWN_COLUMNS = ["plot_id", "tambon_id", "tambon_name", "plot_area_rai", "burn_pct", "no_burn_pct", "burn_status", "burn_status_original",
+                 "tier", "burn_tier", "burn_tier_label", "classification_pct", "valid_observation_pct", "unknown_pct",
+                 "cropland_area_m2", "valid_area_m2", "burn_area_m2", "is_boundary_fragment", "distance_to_collection_km",
+                 "access_gap_index", "access_gap_index_no_viirs", "centroid_lat", "centroid_lon", "tambon_income_baht_year",
+                 "tambon_expense_baht_year", "tambon_debt_free_pct", "exclusion_reason", "priority_group", "needs_verification",
+                 "measure_group", "measure"]
 _INVISIBLE = re.compile("[\u200b\u200c\u200d\u2060\ufeff]")
 
 
@@ -410,6 +450,108 @@ def read_csv(source):
     return frame
 
 
+@st.cache_data(show_spinner="กำลังโหลดข้อมูล…")
+def _cached_read_csv(path_str, mtime, size):
+    """Cache keyed on path + mtime + size: cache busts automatically when the file on disk changes
+    (new deploy, replaced CSV) without needing a manual cache-clear."""
+    return read_csv(Path(path_str))
+
+
+def read_csv_cached(path):
+    """Read a local CSV/CSV.GZ path through the mtime-keyed cache. Never used for uploaded files
+    (those are small, session-only, and already cheap to re-read on each rerun)."""
+    stat = path.stat()
+    return _cached_read_csv(str(path), stat.st_mtime, stat.st_size)
+
+
+def resolve_master_path():
+    """First existing candidate filename under data/, preferring the newest pipeline export."""
+    for name in MASTER_PLOTS_CANDIDATES:
+        candidate = DATA_DIR / name
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+# ── GISTDA validation files: each is optional and independent — a missing or broken file
+# never blocks the main site, it only disables the parts of "ผลประเมิน" that need it. ──
+def _file_stat(path):
+    stat = path.stat()
+    return str(path), stat.st_mtime, stat.st_size
+
+
+@st.cache_data(show_spinner=False)
+def _cached_validation_metrics(path_str, mtime, size):
+    frame = pd.read_csv(path_str, encoding="utf-8-sig")
+    if frame.empty:
+        raise ValueError("ไฟล์ผลประเมินว่างเปล่า")
+    return frame.iloc[0].to_dict()
+
+
+def load_validation_metrics():
+    if not VALID_METRICS_FILE.is_file():
+        return None, f"ไม่พบไฟล์ data/{VALID_METRICS_FILE.name}"
+    try:
+        return _cached_validation_metrics(*_file_stat(VALID_METRICS_FILE)), None
+    except (ValueError, OSError, pd.errors.ParserError) as exc:
+        return None, f"อ่าน {VALID_METRICS_FILE.name} ไม่สำเร็จ: {exc}"
+
+
+@st.cache_data(show_spinner=False)
+def _cached_confusion_matrix(path_str, mtime, size):
+    cm = pd.read_csv(path_str, encoding="utf-8-sig", index_col=0)
+    if cm.shape != (2, 2):
+        raise ValueError("ต้องเป็นตาราง 2×2 (พบ/ไม่พบ ของ GISTDA × BurnWise)")
+    return cm
+
+
+def load_confusion_matrix():
+    if not VALID_CONFUSION_FILE.is_file():
+        return None, f"ไม่พบไฟล์ data/{VALID_CONFUSION_FILE.name}"
+    try:
+        return _cached_confusion_matrix(*_file_stat(VALID_CONFUSION_FILE)), None
+    except (ValueError, OSError, pd.errors.ParserError) as exc:
+        return None, f"อ่าน {VALID_CONFUSION_FILE.name} ไม่สำเร็จ: {exc}"
+
+
+@st.cache_data(show_spinner=False)
+def _cached_validation_tambon(path_str, mtime, size):
+    frame = pd.read_csv(path_str, encoding="utf-8-sig", dtype={"tambon_id": "string"})
+    required = {"tambon_id", "tambon_name", "n_plots", "Precision", "Recall", "F1"}
+    missing = required - set(frame.columns)
+    if missing:
+        raise ValueError("ขาดคอลัมน์: " + ", ".join(sorted(missing)))
+    return frame
+
+
+def load_validation_tambon():
+    if not VALID_TAMBON_FILE.is_file():
+        return None, f"ไม่พบไฟล์ data/{VALID_TAMBON_FILE.name}"
+    try:
+        return _cached_validation_tambon(*_file_stat(VALID_TAMBON_FILE)), None
+    except (ValueError, OSError, pd.errors.ParserError) as exc:
+        return None, f"อ่าน {VALID_TAMBON_FILE.name} ไม่สำเร็จ: {exc}"
+
+
+@st.cache_data(show_spinner="กำลังโหลดผลเทียบรายแปลงกับ GISTDA…")
+def _cached_validation_plots(path_str, mtime, size):
+    frame = pd.read_csv(path_str, encoding="utf-8-sig", dtype={"plot_id": "string", "tambon_id": "string"})
+    required = {"plot_id", "tambon_name", "centroid_lat", "centroid_lon", "TP", "FP", "FN", "TN", "validation_used"}
+    missing = required - set(frame.columns)
+    if missing:
+        raise ValueError("ขาดคอลัมน์: " + ", ".join(sorted(missing)))
+    return frame
+
+
+def load_validation_plots():
+    if not VALID_PLOTS_FILE.is_file():
+        return None, f"ไม่พบไฟล์ data/{VALID_PLOTS_FILE.name}"
+    try:
+        return _cached_validation_plots(*_file_stat(VALID_PLOTS_FILE)), None
+    except (ValueError, OSError, pd.errors.ParserError) as exc:
+        return None, f"อ่าน {VALID_PLOTS_FILE.name} ไม่สำเร็จ: {exc}"
+
+
 def prepare(frame):
     frame = frame.copy()
     summary = None
@@ -423,7 +565,10 @@ def prepare(frame):
     if frame["tambon_name"].isna().any():
         raise ValueError("พบแปลงไม่มีชื่อตำบล กรุณาตรวจการเชื่อมข้อมูลต้นทาง")
     frame["tambon_name"] = frame["tambon_name"].astype(str).str.strip()
-    numeric = ["plot_area_rai", "burn_pct", "valid_observation_pct", "unknown_pct", "distance_to_collection_km", "access_gap_index", "centroid_lat", "centroid_lon", "tambon_income_baht_year"]
+    numeric = ["plot_area_rai", "burn_pct", "no_burn_pct", "classification_pct", "valid_observation_pct", "unknown_pct",
+               "cropland_area_m2", "valid_area_m2", "burn_area_m2", "distance_to_collection_km", "access_gap_index",
+               "access_gap_index_no_viirs", "centroid_lat", "centroid_lon", "tambon_income_baht_year",
+               "tambon_expense_baht_year", "tambon_debt_free_pct"]
     for col in numeric:
         if col not in frame:
             frame[col] = np.nan
@@ -431,9 +576,18 @@ def prepare(frame):
         frame[col] = pd.to_numeric(original, errors="coerce")
         if (original.notna() & frame[col].isna()).any() or np.isinf(frame[col]).any():
             raise ValueError(f"คอลัมน์ {col} มีค่าที่ไม่ใช่ตัวเลข กรุณาตรวจ CSV")
-    for col, lo, hi in [("burn_pct", 0, 100), ("valid_observation_pct", 0, 100), ("unknown_pct", 0, 100), ("access_gap_index", 0, 1), ("centroid_lat", -90, 90), ("centroid_lon", -180, 180)]:
-        if ((frame[col] < lo) | (frame[col] > hi)).any():
+    # eps tolerates float round-off from upstream sums (e.g. burn_pct+no_burn_pct+unknown_pct landing at
+    # 100.00000000000018 instead of exactly 100) without masking a genuinely out-of-range value.
+    eps = 1e-6
+    for col, lo, hi in [("burn_pct", 0, 100), ("no_burn_pct", 0, 100), ("classification_pct", 0, 100), ("valid_observation_pct", 0, 100),
+                        ("unknown_pct", 0, 100), ("access_gap_index", 0, 1), ("access_gap_index_no_viirs", 0, 1),
+                        ("centroid_lat", -90, 90), ("centroid_lon", -180, 180)]:
+        if ((frame[col] < lo - eps) | (frame[col] > hi + eps)).any():
             raise ValueError(f"{col} ต้องอยู่ในช่วง {lo}–{hi} กรุณาตรวจการคำนวณต้นทาง")
+        frame[col] = frame[col].clip(lower=lo, upper=hi)
+    for col in ["cropland_area_m2", "valid_area_m2", "burn_area_m2"]:
+        if (frame[col] < 0).any():
+            raise ValueError(f"{col} ต้องไม่ติดลบ กรุณาตรวจการคำนวณต้นทาง")
     if (frame["plot_area_rai"] < 0).any() or frame["plot_area_rai"].isna().any() or (frame["distance_to_collection_km"] < 0).any():
         raise ValueError("พื้นที่แปลงต้องมีค่าครบ และพื้นที่/ระยะทางต้องไม่ติดลบ")
     if "burn_status" in frame:
@@ -449,7 +603,7 @@ def prepare(frame):
     else:
         related = [c for c in frame.columns if re.search(r"status|class|label|tier|burn|สถานะ", c, re.I)]
         raise ValueError("ไม่พบคอลัมน์ burn_status หรือ tier · คอลัมน์ที่อาจเกี่ยวกับสถานะ: " + (", ".join(related) or "ไม่มี") + " · คอลัมน์ทั้งหมด: " + ", ".join(map(str, frame.columns)) + " · เว็บไม่สร้างสถานะจาก burn_pct/coverage เอง เพราะต้องใช้เกณฑ์เดียวกับ notebook ให้ส่งออกคอลัมน์ burn_status จาก notebook")
-    for col in ["exclusion_reason", "priority_group", "needs_verification"]:
+    for col in ["exclusion_reason", "priority_group", "needs_verification", "measure_group", "measure", "burn_tier", "burn_tier_label"]:
         if col not in frame:
             frame[col] = ""
     values = frame["needs_verification"].fillna("").astype(str).str.strip()
@@ -522,34 +676,7 @@ def demo_data():
     return pd.DataFrame({"plot_id": [f"DEMO-{i:04}" for i in range(n)], "tambon_name": rng.choice(["ต.ท่าตะโก", "ต.ดอนคา", "ต.ทำนบ", "ต.พนมรอก"], n), "plot_area_rai": rng.uniform(.5, 20, n), "burn_status": status, "burn_pct": burn, "valid_observation_pct": np.where(status == "Unknown", rng.uniform(10, 70, n), rng.uniform(80, 100, n)), "centroid_lat": rng.uniform(15.5, 15.8, n), "centroid_lon": rng.uniform(100.3, 100.6, n), "access_gap_index": rng.uniform(0, 1, n), "distance_to_collection_km": rng.uniform(0, 25, n), "exclusion_reason": np.where(status == "Unknown", "ข้อมูลจำลอง: coverage ไม่พอ", ""), "needs_verification": status == "Unknown"})
 
 
-DATA_DIR = BASE / "data"
-
-
-def find_data_files():
-    """Classify CSVs in data/ (and next to app.py) by their header columns, not by file name:
-    plots table = has plot_id + plot_area_rai; tambon overview = has tambon_name + burn_pct (%) and no plot_id."""
-    cands = []
-    for folder in (DATA_DIR, BASE):
-        if folder.is_dir():
-            cands += sorted(folder.glob("*.csv"))
-    plots_f, ov_f = [], []
-    for f in cands:
-        try:
-            cols = {col_key(c) for c in pd.read_csv(f, encoding="utf-8-sig", nrows=0).columns}
-        except Exception:
-            continue
-        if {"plot_id", "plot_area_rai"} <= cols:
-            plots_f.append(f)
-        elif "tambon_name" in cols and col_key("burn_pct (%)") in cols:
-            ov_f.append(f)
-    plots_f.sort(key=lambda f: (f.parent != DATA_DIR, f.name != "burnwise_master_plots.csv", f.name))
-    ov_f.sort(key=lambda f: (f.parent != DATA_DIR, f.name))
-    return (plots_f[0] if plots_f else None), (ov_f[0] if ov_f else None)
-
-
-path, overview_path = find_data_files()
-# no data file in the repo -> open straight into demo mode (clearly labelled); a real file always wins
-st.session_state.setdefault("demo_mode", path is None)
+st.session_state.setdefault("demo_mode", False)
 
 
 def start_demo():
@@ -561,12 +688,14 @@ with st.sidebar:
     filter_box = st.container(key="side-filters")
     data_box = st.container(key="side-upload")
 
+overview_path = DATA_DIR / "burnwise_tambon_overview.csv"
+
 
 def overview_state(file):
     """Light check of the optional tambon file for the sidebar status line (page logic below is unchanged)."""
     if file is None:
-        if overview_path is not None:
-            return "ok", "ใช้ไฟล์ในโฟลเดอร์ data/", overview_path.name
+        if overview_path.is_file():
+            return "ok", "ใช้ไฟล์ในโฟลเดอร์ data/", "burnwise_tambon_overview.csv"
         return "idle", "ไม่จำเป็น · ถ้าไม่ใส่ จะสรุปจากข้อมูลรายแปลง", None
     try:
         ov = read_csv(io.BytesIO(file.getvalue()))
@@ -578,25 +707,21 @@ def overview_state(file):
 
 
 with data_box:
-    side_head("upload", "ข้อมูล", "ใช้ไฟล์ใน data/ อัตโนมัติ หรืออัปโหลดเพื่อทดลองชั่วคราว" if path else "อัปโหลดข้อมูลเพื่อการวิเคราะห์")
-    _up = st.expander("อัปโหลดไฟล์อื่นชั่วคราว", expanded=False) if path else st.container()
-    with _up, st.container(key="fg-plots"):
+    side_head("upload", "อัปโหลดข้อมูล", "อัปโหลดข้อมูลเพื่อการวิเคราะห์")
+    with st.container(key="fg-plots"):
         field_label("ข้อมูลรายแปลง")
-        uploaded = st.file_uploader("ตารางแปลง burnwise_master_plots.csv", type=["csv"], key="plots_upload", label_visibility="collapsed")
+        uploaded = st.file_uploader("ตารางแปลงหลัก (เปลี่ยนเฉพาะ session นี้ — ไม่แก้ไฟล์ใน data/)", type=["csv"], key="plots_upload", label_visibility="collapsed")
         plots_status = st.empty()
-    with _up, st.container(key="fg-overview"):
+    with st.container(key="fg-overview"):
         field_label("ภาพรวมตำบล", "(ไม่จำเป็น)")
         optional_overview = st.file_uploader("ภาพรวมตำบล (ไม่จำเป็น)", type=["csv"], key="overview_upload", label_visibility="collapsed")
         ov_kind, ov_text, ov_detail = overview_state(optional_overview)
         st.markdown(status_html(ov_kind, ov_text, ov_detail), unsafe_allow_html=True)
     with st.container(key="fg-extra"):
-        if path is None:
-            demo_toggle = st.toggle("ทดลองหน้าตาด้วยข้อมูลจำลอง", key="demo_mode")
-            demo = demo_toggle and uploaded is None  # an uploaded CSV always wins over demo data
-            if demo_toggle and uploaded is not None:
-                st.caption("มีไฟล์ที่อัปโหลดอยู่ จึงใช้ไฟล์จริงแทนข้อมูลจำลอง")
-        else:
-            demo = False  # real file in data/ -> never fall back to demo data
+        demo_toggle = st.toggle("ทดลองหน้าตาด้วยข้อมูลจำลอง", key="demo_mode")
+        demo = demo_toggle and uploaded is None  # an uploaded CSV always wins over demo data
+        if demo_toggle and uploaded is not None:
+            st.caption("มีไฟล์ที่อัปโหลดอยู่ จึงใช้ไฟล์จริงแทนข้อมูลจำลอง")
         field_label("ช่วงศึกษาที่ระบุใน notebook")
         period = st.text_input("ช่วงศึกษาที่ระบุใน notebook", placeholder="เช่น พ.ย. 2568 – ม.ค. 2569", label_visibility="collapsed")
         st.caption("ชื่อช่วงศึกษาใช้แสดงประกอบเท่านั้น ไม่ได้กรองวันที่ใน CSV")
@@ -620,19 +745,21 @@ with top:
             page = st.radio("หน้าเว็บ", PAGES, horizontal=True, label_visibility="collapsed", format_func=lambda p: f":material/{PAGE_ICON[p]}: {p}")
         dl_slot = c_dl.empty()
 
+path = resolve_master_path()
 try:
     if demo:
         raw = demo_data(); source_name = "ข้อมูลจำลอง"
     elif uploaded is not None:
         raw = read_csv(io.BytesIO(uploaded.getvalue())); source_name = uploaded.name
     elif path is not None:
-        raw = read_csv(path); source_name = path.name
+        raw = read_csv_cached(path); source_name = f"data/{path.name}"
     else:
-        plots_status.markdown(status_html("idle", "ยังไม่มีไฟล์ · อัปโหลด หรือใส่ CSV ใน data/ บน GitHub"), unsafe_allow_html=True)
-        filters_wait("อัปโหลดข้อมูลรายแปลงก่อน จึงจะใช้ตัวกรองได้")
+        plots_status.markdown(status_html("warn", "ไม่พบไฟล์ข้อมูลแปลงใน data/", " / ".join(MASTER_PLOTS_CANDIDATES)), unsafe_allow_html=True)
+        filters_wait("ยังไม่มีไฟล์ข้อมูล จึงใช้ตัวกรองไม่ได้")
         with card("start"):
-            head("เริ่มต้นใช้งาน BurnWise", "ยังไม่มีข้อมูลแปลงให้แสดง", page=True)
-            st.markdown('<ol class="steps"><li>อัปโหลด <b>burnwise_master_plots.csv</b> ทางแถบด้านซ้าย</li><li>หรือเพิ่มไฟล์นี้ในโฟลเดอร์ <b>data</b> ของ GitHub</li><li>หรือดูหน้าตาเว็บก่อนด้วยข้อมูลจำลอง (ไม่ใช่ผลของโครงการ)</li></ol>', unsafe_allow_html=True)
+            head("ไม่พบไฟล์ข้อมูลหลัก", "เว็บนี้แสดงผลจากไฟล์ CSV ที่คำนวณไว้แล้วเท่านั้น ไม่ได้คำนวณใหม่เอง", page=True)
+            st.error("หาไฟล์ " + " หรือ ".join(f"`data/{n}`" for n in MASTER_PLOTS_CANDIDATES) + " ไม่พบในโฟลเดอร์ของเว็บ")
+            st.markdown('<ol class="steps"><li>วางไฟล์ <b>burnwise_master_plots_with_measures_last1.csv.gz</b> ไว้ในโฟลเดอร์ <b>data/</b> ของ repo บน GitHub แล้ว deploy ใหม่</li><li>หรืออัปโหลดไฟล์ CSV ทางแถบด้านซ้ายเพื่อดูผลชั่วคราว (เฉพาะ session นี้)</li><li>หรือดูหน้าตาเว็บก่อนด้วยข้อมูลจำลอง (ไม่ใช่ผลของโครงการ)</li></ol>', unsafe_allow_html=True)
             st.button(":material/science: ทดลองด้วยข้อมูลจำลอง", type="primary", on_click=start_demo)
         st.stop()
     plots, mode, status_table = prepare(raw)
@@ -641,7 +768,7 @@ try:
     elif uploaded is not None:
         plots_status.markdown(status_html("ok", f"โหลดแล้ว · {len(plots):,} แถว", uploaded.name), unsafe_allow_html=True)
     else:
-        plots_status.markdown(status_html("ok", f"ใช้ไฟล์ในโฟลเดอร์โปรเจกต์ · {len(plots):,} แถว", path.name), unsafe_allow_html=True)
+        plots_status.markdown(status_html("ok", f"โหลดข้อมูลจริงอัตโนมัติ · {len(plots):,} แถว", path.name), unsafe_allow_html=True)
 except StatusError as exc:
     plots_status.markdown(status_html("warn", "อ่านไฟล์ไม่สำเร็จ · ตรวจค่า burn_status"), unsafe_allow_html=True)
     filters_wait("แก้ไฟล์ให้ผ่านก่อน จึงจะใช้ตัวกรองได้")
@@ -733,8 +860,8 @@ if page == "ภาพรวม":
                  ("พื้นที่รวม (ไร่)", f"{f['plot_area_rai'].sum():,.0f}", "ผลรวมพื้นที่แปลงตาม CSV", None),
                  ("Tier แดง (เดิม)", int(f["display_status"].eq("Tier แดง (เดิม)").sum()), "กลุ่มจากตรรกะเดิม ไม่ยืนยันว่าเผา", (STATUS_ICON["Tier แดง (เดิม)"], colors["Tier แดง (เดิม)"])),
                  ("ข้อมูลไม่เพียงพอ", int(f["display_status"].eq("ข้อมูลไม่เพียงพอ").sum()), "แยกจากกลุ่มที่จัดสถานะได้", (STATUS_ICON["ข้อมูลไม่เพียงพอ"], colors["ข้อมูลไม่เพียงพอ"]))]
-    for col, (label, value, note, tag) in zip(st.columns(4), cards):
-        with col:
+    with st.container(key="metrics-overview"):
+        for label, value, note, tag in cards:
             metric(label, f"{value:,}" if isinstance(value, int) else value, note, tag)
     left, right = st.columns([1.1, 1])
     with left, card("tambon-status"):
@@ -744,7 +871,7 @@ if page == "ภาพรวม":
     with right, card("tambon-burn"):
         head("สัดส่วนสัญญาณเผารายตำบล")
         overview = None
-        if not demo and (optional_overview is not None or overview_path is not None):
+        if not demo and (optional_overview is not None or overview_path.is_file()):
             try:
                 overview = read_csv(io.BytesIO(optional_overview.getvalue()) if optional_overview else overview_path)
                 if not {"tambon_name", "burn_pct (%)"}.issubset(overview):
@@ -784,6 +911,22 @@ if page == "ภาพรวม":
         st.caption(f"{len(review):,} แปลง · รวมสถานะข้อมูลไม่พอ เหตุผลคัดออก หรือธงตรวจสอบจากต้นทาง · ตัวอย่าง 100 แถวแรก")
         st.dataframe(review[["plot_id", "tambon_name", "display_status", "burn_pct", "valid_observation_pct", "exclusion_reason", "needs_verification"]].head(100), hide_index=True, width="stretch")
 
+    if f["measure_group"].astype(str).str.strip().ne("").any():
+        with card("measures"):
+            head("มาตรการเบื้องต้น", "แยกตามกลุ่มมาตรการจริงจากตาราง CSV · แสดงร่วมกับ Access Gap และระยะทางไปจุดรับซื้อ")
+            mg = f.loc[f["measure_group"].astype(str).str.strip().ne(""), "measure_group"].value_counts().rename_axis("กลุ่มมาตรการ").reset_index(name="จำนวนแปลง")
+            left_m, right_m = st.columns([1, 1.2])
+            with left_m:
+                fig = px.bar(mg.sort_values("จำนวนแปลง"), x="จำนวนแปลง", y="กลุ่มมาตรการ", orientation="h", color_discrete_sequence=[SEC])
+                fig.update_traces(marker_line_color=BG, marker_line_width=1)
+                st.plotly_chart(chart_style(fig, 300), width="stretch")
+            with right_m:
+                mean_gap = f.dropna(subset=["access_gap_index"]).groupby("measure_group", as_index=False).agg(
+                    access_gap_index=("access_gap_index", "mean"), distance_to_collection_km=("distance_to_collection_km", "mean"))
+                mean_gap.columns = ["กลุ่มมาตรการ", "Access Gap เฉลี่ย", "ระยะทางเฉลี่ย (กม.)"]
+                st.dataframe(mean_gap.round(2), hide_index=True, width="stretch")
+            st.caption("ระยะทางยังไม่รวมช่วงจากแปลงเข้าสู่ node ถนน และต้องตรวจสอบว่าจุดรับซื้อยังเปิดบริการจริง · No Burn หมายถึงไม่เข้าเกณฑ์ตรวจพบ ไม่ใช่หลักฐานยืนยันว่าไม่เผาหรือไถกลบ")
+
 elif page == "สำรวจแปลง":
     with card("hero"):
         head("สำรวจแปลงรายพื้นที่", "ค้นหารหัสแปลง ดูตำแหน่ง และตรวจรายละเอียดรายแปลง", page=True)
@@ -797,7 +940,7 @@ elif page == "สำรวจแปลง":
         show_map(explored)
     with card("explore-table"):
         head("ตารางแปลง")
-        cols = ["plot_id", "tambon_name", "display_status", "plot_area_rai", "burn_pct", "valid_observation_pct", "distance_to_collection_km", "access_gap_index", "exclusion_reason"]
+        cols = ["plot_id", "tambon_name", "display_status", "plot_area_rai", "burn_pct", "valid_observation_pct", "distance_to_collection_km", "access_gap_index", "measure", "exclusion_reason"]
         st.dataframe(explored[cols].head(1000), hide_index=True, width="stretch")
         st.download_button("ดาวน์โหลดผลค้นหาทั้งหมด", csv_bytes(explored[export_cols]), "burnwise_search.csv", "text/csv")
     if not explored.empty:
@@ -811,11 +954,17 @@ elif page == "สำรวจแปลง":
 
 elif page == "คุณภาพข้อมูล":
     unknown = f[f["display_status"].eq("ข้อมูลไม่เพียงพอ")]
+    val_metrics, val_metrics_err = load_validation_metrics()
+    n_excluded_val = int(val_metrics["n_excluded"]) if val_metrics else None
     head("คุณภาพข้อมูลและจุดที่ต้องตรวจสอบ", "สัดส่วนภาพใช้ได้และเหตุผลที่แปลงถูกจัดเป็นข้อมูลไม่เพียงพอ ก่อนเชื่อผลใด ๆ ควรตรวจหน้านี้ก่อน", page=True)
-    a, b, c = st.columns(3)
-    with a: metric("ข้อมูลไม่เพียงพอ", f"{len(unknown):,}", "แปลงที่ยังไม่ควรสรุปสถานะ", (STATUS_ICON["ข้อมูลไม่เพียงพอ"], colors["ข้อมูลไม่เพียงพอ"]))
-    with b: metric("ไม่มีระยะทางถนน", f"{f['distance_to_collection_km'].isna().sum():,}", "ไม่แทนระยะทางที่หายด้วยศูนย์", ("!", S_AMBER))
-    with c: metric("ไม่มี Access Gap", f"{f['access_gap_index'].isna().sum():,}", "ตรวจข้อมูลประกอบก่อนจัดลำดับ", ("!", S_AMBER))
+    with st.container(key="metrics-quality"):
+        metric("ข้อมูลไม่เพียงพอ", f"{len(unknown):,}", "แปลงที่ยังไม่ควรสรุปสถานะ (ในตัวกรองปัจจุบัน)", (STATUS_ICON["ข้อมูลไม่เพียงพอ"], colors["ข้อมูลไม่เพียงพอ"]))
+        metric("ไม่มีระยะทางถนน", f"{f['distance_to_collection_km'].isna().sum():,}", "ไม่แทนระยะทางที่หายด้วยศูนย์", ("!", S_AMBER))
+        metric("ไม่มี Access Gap", f"{f['access_gap_index'].isna().sum():,}", "ตรวจข้อมูลประกอบก่อนจัดลำดับ", ("!", S_AMBER))
+        if n_excluded_val is not None:
+            metric("ตัดออกจากผลประเมิน GISTDA", f"{n_excluded_val:,}", "คนละเงื่อนไขกับ \u201cข้อมูลไม่เพียงพอ\u201d ด้านบน · ดูหน้าผลประเมิน", ("!", S_GREY))
+        else:
+            metric("ตัดออกจากผลประเมิน GISTDA", "ไม่ทราบ", val_metrics_err or "ไม่มีไฟล์ผลประเมิน", ("?", S_GREY))
     left, right = st.columns(2)
     with left, card("coverage"):
         head("Coverage" if mode == "modern" else "สัดส่วน valid_observation_pct เดิม", "การกระจายตัวของ valid_observation_pct")
@@ -827,15 +976,166 @@ elif page == "คุณภาพข้อมูล":
             if mode == "modern": fig.add_vline(x=80, line_dash="dash", line_color=BRAND, line_width=2, annotation_text="เกณฑ์โค้ดหลัก 80%", annotation_font=dict(color=BRAND, size=12))
             st.plotly_chart(chart_style(fig), width="stretch")
         st.caption(f"ไม่มีค่า {f['valid_observation_pct'].isna().sum():,} แปลง" + (" · ในไฟล์เดิมค่านี้อาจเป็นเผา+ไถกลบ ไม่ใช่พื้นที่ที่มีภาพใช้ได้" if mode == "legacy" else " · กราฟไม่เปลี่ยนสถานะที่บันทึกใน CSV"))
+        if val_metrics is not None:
+            vstart, vend = val_metrics.get("validation_start"), val_metrics.get("validation_end_exclusive")
+            st.caption(f"ข้อจำกัดของรอบข้อมูลนี้ (ช่วงเทียบ GISTDA {vstart} ถึงก่อน {vend}): {CURRENT_ROUND_IMAGE_NOTE}")
+        else:
+            st.caption("ข้อจำกัดของรอบข้อมูล (จำนวนภาพที่ใช้ได้): ไม่ทราบ — ไม่มีไฟล์ผลประเมินสำหรับอ้างอิงช่วงเวลา")
     with right, card("reasons"):
         head("เหตุผลที่ต้องตรวจสอบ", "จำนวนแปลงแยกตามเหตุผลคัดออกหรือธงตรวจสอบ")
-        reasons = f.loc[f["review_flag"], "exclusion_reason"].fillna("").astype(str).str.strip().replace("", "ธงตรวจสอบ/สถานะข้อมูลไม่พอ แต่ไม่มีเหตุผลคัดออก")
+        reason_raw = f["exclusion_reason"].fillna("").astype(str).str.strip()
+        no_cropland = reason_raw.str.contains("ไม่มี cropland pixel", regex=False)
+        no_image = reason_raw.str.contains("มี cropland แต่ไม่มีภาพ", regex=False)
+        cq1, cq2 = st.columns(2)
+        with cq1: metric("ไม่มี cropland pixel", f"{int(no_cropland.sum()):,}", "ไม่ใช่พื้นที่เกษตรตาม ESA WorldCover เลย", ("!", S_AMBER))
+        with cq2: metric("มี cropland แต่ไม่มีภาพใช้ได้", f"{int(no_image.sum()):,}", "เมฆบัง/ไม่มีข้อมูลในช่วงที่ต้องใช้", ("!", S_AMBER))
+        reasons = reason_raw[f["review_flag"]].replace("", "ธงตรวจสอบ/สถานะข้อมูลไม่พอ แต่ไม่มีเหตุผลคัดออก")
         counts = reasons.value_counts().rename_axis("เหตุผล").reset_index(name="จำนวนแปลง")
         st.dataframe(counts, hide_index=True, width="stretch")
+    with card("verification"):
+        head("แปลงที่ต้องตรวจสอบซ้ำ (needs_verification)", "แยกจากกลุ่ม \u201cข้อมูลไม่เพียงพอ\u201d ด้านบน — คนละเงื่อนไข: นี่คือธงให้ตรวจซ้ำก่อนใช้งาน ไม่ใช่สถานะเผา/ไม่เผา")
+        nv_raw = f["needs_verification"].fillna("").astype(str).str.strip()
+        nv_rows = f[nv_raw.ne("")]
+        if nv_rows.empty:
+            strip("ไม่มีแปลงที่มีธง needs_verification ในตัวกรองปัจจุบัน")
+        else:
+            tags = sorted({re.sub(r"^ตรวจสอบซ้ำ:\s*", "", part.strip()) for text in nv_rows["needs_verification"] for part in str(text).split(";") if part.strip()})
+            tag_choice = st.multiselect("กรองตามเหตุผลตรวจสอบซ้ำ", tags, key="nv-reason-filter")
+            shown = nv_rows if not tag_choice else nv_rows[nv_rows["needs_verification"].apply(lambda t: any(tag in str(t) for tag in tag_choice))]
+            st.caption(f"{len(shown):,} / {len(nv_rows):,} แปลงที่มีธงตรวจสอบซ้ำ (จากทั้งหมด {len(f):,} แปลงในตัวกรอง)")
+            cols_nv = ["plot_id", "tambon_name", "display_status", "burn_pct", "needs_verification"]
+            st.dataframe(shown[cols_nv].head(500), hide_index=True, width="stretch")
+            st.download_button("ดาวน์โหลดแปลงที่ต้องตรวจสอบซ้ำทั้งหมด", csv_bytes(shown[export_cols]), "burnwise_needs_verification.csv", "text/csv")
     with card("notes"):
         head("ข้อควรทราบ")
-        strip("GISTDA เป็นส่วนเปรียบเทียบเพิ่มเติม: เว็บนี้ไม่ต้องรอไฟล์รอยเผา หากช่วงอ้างอิงไม่ครบ ให้เว้นผลประเมินส่วนนั้นไว้")
-        st.markdown("ผล FIRMS ที่เคยทดสอบ 2/2 จุดที่อ่านภาพได้ มีตัวอย่างน้อย และไม่มีตัวอย่างยืนยันไม่เผา จึงยังไม่ใช้สรุปความแม่นยำทั้งโครงการ")
+        strip("หน้า \u201cผลประเมิน\u201d เทียบผลกับผลิตภัณฑ์ดาวเทียมภายนอก (GISTDA) ไม่ใช่ข้อมูลภาคสนามยืนยันจริง (Ground Truth)")
+        st.markdown("ผล FIRMS ที่เคยทดสอบ 2/2 จุดที่อ่านภาพได้ มีตัวอย่างน้อย และไม่มีตัวอย่างยืนยันไม่เผา จึงยังไม่ใช้สรุปความแม่นยำทั้งโครงการ — คนละชุดกับผลเทียบ GISTDA ในหน้า \u201cผลประเมิน\u201d ซึ่งมีตัวอย่างมากกว่ามาก")
+
+elif page == "ผลประเมิน":
+    head("ความสอดคล้องกับ GISTDA", "เทียบผล BurnWise กับผลิตภัณฑ์ดาวเทียมภายนอกของ GISTDA ซึ่งใช้ Sentinel-2 ร่วมกัน — ไม่ใช่ข้อมูลภาคสนามยืนยันจริง (Ground Truth)", page=True)
+    val_metrics, err_metrics = load_validation_metrics()
+    confusion, err_cm = load_confusion_matrix()
+    val_tambon, err_tambon = load_validation_tambon()
+    val_plots, err_plots = load_validation_plots()
+
+    missing_notes = [("เมตริกรวม (Accuracy/Precision/Recall/F1)", err_metrics) if val_metrics is None else None,
+                      ("Confusion Matrix", err_cm) if confusion is None else None,
+                      ("ผลรายตำบล", err_tambon) if val_tambon is None else None,
+                      ("สำรวจแปลงที่ผลไม่ตรงกัน", err_plots) if val_plots is None else None]
+    missing_notes = [m for m in missing_notes if m]
+    if missing_notes:
+        with card("eval-missing"):
+            head("บางส่วนของหน้านี้ยังแสดงไม่ได้")
+            for label, err in missing_notes:
+                st.warning(f"{label}: {err}")
+
+    if val_metrics is not None:
+        pct = lambda key: f"{val_metrics[key] * 100:.1f}%"
+        with st.container(key="metrics-eval"):
+            metric("Accuracy", pct("Accuracy"), "สัดส่วนที่ตรงกันทั้ง Burn และ No Burn", None)
+            metric("Precision", pct("Precision"), "ในแปลงที่ BurnWise ชี้ว่าเผา ตรงกับ GISTDA กี่ %", None)
+            metric("Recall", pct("Recall"), "ในแปลงที่ GISTDA ชี้ว่าเผา BurnWise จับได้กี่ %", None)
+            metric("F1", pct("F1"), "ค่าเฉลี่ยถ่วงน้ำหนักของ Precision/Recall", None)
+        with card("eval-scope"):
+            head("ขอบเขตการประเมินรอบนี้")
+            vstart, vend = val_metrics.get("validation_start"), val_metrics.get("validation_end_exclusive")
+            e1, e2, e3 = st.columns(3)
+            with e1: metric("แปลงทั้งหมด", f"{int(val_metrics['n_plots_total']):,}", "ก่อนตัดแปลงที่เปรียบเทียบไม่ได้", None)
+            with e2: metric("ใช้ประเมินจริง", f"{int(val_metrics['n_plots']):,}", "TN+FP+FN+TP รวมกัน", None)
+            with e3: metric("ตัดออก", f"{int(val_metrics['n_excluded']):,}", "เช่น ไม่มีภาพ/ไม่มี cropland ในช่วงเทียบ", None)
+            st.caption(f"ช่วงเทียบ: {vstart} ถึงก่อนวันที่ {vend} (ไม่รวมวันสิ้นสุด) · เกณฑ์เทียบ: {val_metrics.get('support', 'ไม่ระบุ')}")
+            st.caption(f"ไฟล์อ้างอิงฝั่ง GISTDA: {val_metrics.get('reference_files', 'ไม่ระบุ')} · ประเภทการเทียบ: {val_metrics.get('comparison_type', 'ไม่ระบุ')}")
+            st.caption(f"plot_label_IoU รวม = {val_metrics['plot_label_IoU']*100:.1f}% — นี่คือ IoU ของ \u201cชุดแปลงที่จัดเป็น Burn\u201d (เทียบชุดแปลง) ไม่ใช่ spatial IoU ของพื้นที่ไหม้จริงบนแผนที่")
+
+    if confusion is not None:
+        with card("eval-confusion"):
+            head("Confusion Matrix", "แถว = ผลจาก GISTDA · คอลัมน์ = ผลจาก BurnWise")
+            gistda_rows = confusion.index.tolist(); burnwise_cols = confusion.columns.tolist()
+            suffix = lambda label: label.split("_", 1)[1] if "_" in label else label
+            html = ['<div class="cm-wrap"><table class="cm-table"><thead><tr><th class="cm-corner" colspan="2"></th>']
+            for c in burnwise_cols:
+                html.append(f"<th colspan='1'>BurnWise: {escape(c.replace('BurnWise_', '').replace('_', ' '))}</th>")
+            html.append("</tr></thead><tbody>")
+            matched = 0
+            for r in gistda_rows:
+                html.append(f"<tr><th>GISTDA: {escape(r.replace('GISTDA_', '').replace('_', ' '))}</th>")
+                for c in burnwise_cols:
+                    is_match = suffix(r) == suffix(c)
+                    value = int(confusion.loc[r, c])
+                    if is_match: matched += value
+                    html.append(f"<td class='{'match' if is_match else 'mismatch'}'>{value:,}</td>")
+                html.append("</tr>")
+            html.append("</tbody></table></div>")
+            st.markdown("".join(html), unsafe_allow_html=True)
+            total = int(confusion.values.sum())
+            mismatched = total - matched
+            st.caption(f"ทั้งสองพบผลตรงกัน {matched:,} แปลง ({matched/total*100:.1f}%) · ผลไม่ตรงกัน {mismatched:,} แปลง ({mismatched/total*100:.1f}%) จากทั้งหมด {total:,} แปลงที่ใช้ประเมิน")
+
+    if val_tambon is not None:
+        with card("eval-tambon"):
+            head("ผลรายตำบล", "Precision / Recall / F1 พร้อมจำนวนแปลงที่ใช้ประเมินของแต่ละตำบล")
+            long = val_tambon.melt(id_vars=["tambon_name", "n_plots"], value_vars=["Precision", "Recall", "F1"], var_name="ตัวชี้วัด", value_name="ค่า")
+            long["ค่า (%)"] = long["ค่า"] * 100
+            fig = px.bar(long.sort_values("tambon_name"), x="tambon_name", y="ค่า (%)", color="ตัวชี้วัด", barmode="group",
+                        hover_data={"n_plots": True, "ค่า (%)": ":.1f"}, labels={"tambon_name": ""})
+            fig.update_traces(marker_line_color=BG, marker_line_width=1)
+            st.plotly_chart(chart_style(fig, 400), width="stretch")
+            table_cols = ["tambon_name", "n_plots", "Accuracy", "Precision", "Recall", "F1", "plot_label_IoU"]
+            show_tb = val_tambon[table_cols].rename(columns={"tambon_name": "ตำบล", "n_plots": "จำนวนแปลงที่ใช้ประเมิน"})
+            for c in ["Accuracy", "Precision", "Recall", "F1", "plot_label_IoU"]:
+                show_tb[c] = (show_tb[c] * 100).round(1)
+            st.dataframe(show_tb, hide_index=True, width="stretch")
+            st.download_button("ดาวน์โหลดผลรายตำบล", csv_bytes(val_tambon), "burnwise_gistda_validation_tambon.csv", "text/csv")
+            st.caption("plot_label_IoU คือ IoU ของชุดแปลงที่จัดเป็น Burn ในแต่ละตำบล ไม่ใช่ spatial IoU ของพื้นที่ไหม้")
+
+    if val_plots is not None:
+        with card("eval-mismatch"):
+            head("สำรวจแปลงที่ผลไม่ตรงกัน", "เชื่อมกับตารางหลักด้วย plot_id · แปลงที่ไม่อยู่ในชุดประเมินจะแสดงว่า \u201cไม่ได้ใช้ประเมิน\u201d เสมอ")
+            dup_val = int(val_plots["plot_id"].duplicated().sum())
+            gistda_cols = ["plot_id", "validation_used", "BurnWise_Burn", "GISTDA_Burn", "burnwise_eval_pct", "gistda_overlap_pct", "eval_pixels", "TP", "FP", "FN", "TN"]
+            gistda_cols = [c for c in gistda_cols if c in val_plots.columns]
+            merged = plots.merge(val_plots[gistda_cols].drop_duplicates(subset="plot_id"), on="plot_id", how="left", validate="one_to_one")
+            n_unmatched_master = int((~plots["plot_id"].isin(val_plots["plot_id"])).sum())
+            n_unmatched_val = int((~val_plots["plot_id"].isin(plots["plot_id"])).sum())
+            group = np.select(
+                [merged["TP"].eq(1), merged["TN"].eq(1), merged["FP"].eq(1), merged["FN"].eq(1)],
+                ["ทั้งสองพบ", "ทั้งสองไม่พบ", "BurnWise พบฝ่ายเดียว", "GISTDA พบฝ่ายเดียว"],
+                default="ไม่ได้ใช้ประเมิน")
+            merged["ผลเทียบ"] = group
+            st.caption(f"plot_id ซ้ำในไฟล์ผลประเมิน: {dup_val:,} · แปลงในตารางหลักที่ไม่อยู่ในชุดประเมิน: {n_unmatched_master:,} (= \u201cไม่ได้ใช้ประเมิน\u201d) · plot_id ในไฟล์ผลประเมินที่หาไม่พบในตารางหลัก: {n_unmatched_val:,}")
+
+            mm_t, mm_g = st.columns(2)
+            with mm_t:
+                mm_tambon = st.multiselect("ตำบล", sorted(merged["tambon_name"].unique()), key="mm-tambon")
+            with mm_g:
+                group_options = ["ทั้งสองพบ", "BurnWise พบฝ่ายเดียว", "GISTDA พบฝ่ายเดียว", "ทั้งสองไม่พบ", "ไม่ได้ใช้ประเมิน"]
+                mm_group = st.multiselect("กลุ่มผล", group_options, key="mm-group")
+            mm = merged
+            if mm_tambon: mm = mm[mm["tambon_name"].isin(mm_tambon)]
+            if mm_group: mm = mm[mm["ผลเทียบ"].isin(mm_group)]
+            st.caption(f"พบ {len(mm):,} / {len(merged):,} แปลง ตามตัวกรองด้านบน")
+
+            mapped = mm.dropna(subset=["centroid_lat", "centroid_lon"])
+            mapped = mapped[mapped["centroid_lat"].between(-90, 90) & mapped["centroid_lon"].between(-180, 180)]
+            if mapped.empty:
+                strip("ไม่มีแปลงที่มีพิกัดถูกต้องตามตัวกรองนี้")
+            else:
+                sampled = mapped if len(mapped) <= 8000 else mapped.sample(8000, random_state=42)
+                group_colors = {"ทั้งสองพบ": S_GREEN, "BurnWise พบฝ่ายเดียว": S_RED, "GISTDA พบฝ่ายเดียว": S_AMBER, "ทั้งสองไม่พบ": SKY, "ไม่ได้ใช้ประเมิน": S_GREY}
+                fig = px.scatter_map(sampled, lat="centroid_lat", lon="centroid_lon", color="ผลเทียบ", color_discrete_map=group_colors,
+                                     category_orders={"ผลเทียบ": group_options}, hover_name="plot_id",
+                                     hover_data={"tambon_name": True, "burnwise_eval_pct": ":.1f" if "burnwise_eval_pct" in sampled else False,
+                                                 "gistda_overlap_pct": ":.1f" if "gistda_overlap_pct" in sampled else False, "centroid_lat": False, "centroid_lon": False},
+                                     zoom=10, center={"lat": sampled["centroid_lat"].median(), "lon": sampled["centroid_lon"].median()}, map_style="open-street-map")
+                fig.update_traces(marker=dict(size=7, opacity=.75))
+                fig.update_layout(height=430, margin=dict(l=0, r=0, t=0, b=0), font=dict(family=FONT_PLOT, color=INK),
+                                  legend=dict(title=None, orientation="h", bgcolor="rgba(252,247,248,.88)", bordercolor=LINE, borderwidth=1))
+                st.plotly_chart(fig, width="stretch")
+                st.caption(f"แสดง {len(sampled):,} / {len(mapped):,} จุดที่มีพิกัด · จุดกึ่งกลางแปลง ไม่ใช่ขอบเขตแปลงจริง")
+
+            detail_cols = [c for c in ["plot_id", "tambon_name", "ผลเทียบ", "burn_pct", "burnwise_eval_pct", "gistda_overlap_pct", "access_gap_index", "measure"] if c in mm.columns]
+            st.dataframe(mm[detail_cols].head(1000), hide_index=True, width="stretch")
+            st.download_button("ดาวน์โหลดผลตามตัวกรองนี้", csv_bytes(mm[[c for c in mm.columns if c not in ("display_status", "review_flag")]]), "burnwise_gistda_mismatch.csv", "text/csv")
 
 else:
     with card("about"):
@@ -846,6 +1146,7 @@ else:
     with card("about-sources"):
         head("แหล่งข้อมูลและข้อจำกัด")
         st.markdown("**แหล่งข้อมูลในกระบวนการ:** Sentinel-2, FIRMS, Fields of The World, ขอบเขต DOPA, โครงข่ายถนน OpenStreetMap และข้อมูลรายได้ระดับตำบลที่ทีมเลือกใช้")
+        st.markdown("**การเทียบผล:** หน้า \u201cผลประเมิน\u201d เทียบผล BurnWise กับผลิตภัณฑ์ดาวเทียมภายนอกของ GISTDA (ซึ่งใช้ Sentinel-2 เช่นกัน) เพื่อดูความสอดคล้อง ไม่ใช่ข้อมูลภาคสนามยืนยันจริง (Ground Truth)")
         st.markdown("**ข้อจำกัด:** สัญญาณเผาไม่ใช่หลักฐานยืนยันรายบุคคล · No Burn ไม่ยืนยันว่าไถกลบ · รายได้ตำบลไม่ใช่รายได้เจ้าของแปลง · Access Gap เป็นดัชนีประกอบการสำรวจ")
 
 st.markdown('<div class="footer">BurnWise · ท่าตะโก · ตรวจสอบข้อมูลและหลักฐานภาคสนามก่อนใช้กำหนดมาตรการ</div>', unsafe_allow_html=True)
