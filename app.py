@@ -171,7 +171,17 @@ overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior:contai
 .up-status.warn i{background:var(--ink);}
 .up-status.idle i{background:transparent;color:var(--muted);border:1px solid var(--line);}
 /* ── cards (plain keyed containers; no thin default border) ── */
-[class*="st-key-card-"]{background:var(--bg);border:1px solid rgba(206,211,220,.55);border-radius:26px;padding:22px 24px;box-shadow:var(--raise);box-sizing:border-box;min-width:0;}
+[class*="st-key-card-"]{background:var(--bg);border:1px solid rgba(206,211,220,.55);border-radius:26px;padding:24px;box-shadow:var(--raise);box-sizing:border-box;min-width:0;}
+/* vertical rhythm *inside* a card: one consistent 20px between heading/desc, card-rows, tables and notes —
+   satisfies every "16–20 / 20–24 / ≥20px between X and Y inside a card" spacing rule at once.
+   Descendant (not child) selector on purpose: a direct-child combinator here previously failed silently
+   because st.container()'s key class and its stVerticalBlock aren't always direct parent/child in every
+   Streamlit layout nesting — see the row-* rules below, which use the same descendant-selector approach
+   and are confirmed working. This only ever sets a *gap* (a no-op if it doesn't match), so it's safe even
+   if some wrapping extra level exists; it does not re-nest or restyle anything. */
+[class*="st-key-card-"] [data-testid="stVerticalBlock"]{gap:20px;}
+.note-group{display:flex;flex-direction:column;gap:11px;}
+.note-group .note-line{font-size:13px;color:var(--muted);line-height:1.5;overflow-wrap:anywhere;word-break:break-word;}
 [data-testid="stHorizontalBlock"]{align-items:stretch!important;gap:28px!important;}
 [data-testid="stHorizontalBlock"]:has(>[data-testid="stColumn"]:nth-child(2):last-child){gap:32px!important;}
 .block-container>[data-testid="stVerticalBlock"],[data-testid="stMainBlockContainer"]>[data-testid="stVerticalBlock"]{gap:28px;}
@@ -297,6 +307,11 @@ button:focus-visible{outline:3px solid rgba(144,194,231,.95)!important;outline-o
   [class*="st-key-row-"] [data-testid="stHorizontalBlock"]{flex-wrap:wrap!important;}
   [class*="st-key-row-"] [data-testid="stColumn"]{flex:1 1 100%!important;}
 }
+/* tambon chart+table pair: the right card (chart+caption+scrollable table) is structurally taller content
+   than the left (chart+button) — stretching the left card to match would just be large empty space, which
+   is exactly what was reported, so this pair does not stretch; each card hugs its own (height-bounded)
+   content instead. Every other row- pair keeps the default stretch (equal-height) behaviour. */
+[class*="st-key-row-2up-tambon"] [data-testid="stHorizontalBlock"]{align-items:flex-start!important;}
 /* ── comparison table (GISTDA confusion matrix) ── */
 .cm-wrap{overflow-x:auto;}
 .cm-table{border-collapse:separate;border-spacing:0;width:100%;font-size:13.5px;}
@@ -348,6 +363,13 @@ def metric(label, value, note, tag=None):
 
 def strip(text):
     st.markdown(f'<div class="strip"><span class="ico">i</span><span>{escape(text)}</span></div>', unsafe_allow_html=True)
+
+
+def note_group(lines):
+    """A tight block of secondary note lines (scope/reference/caveat text) visually grouped and separated
+    from the card-row above it, instead of loose st.caption calls with default/ambiguous spacing."""
+    html = '<div class="note-group">' + "".join(f'<div class="note-line">{escape(line)}</div>' for line in lines) + "</div>"
+    st.markdown(html, unsafe_allow_html=True)
 
 
 def side_head(kind, title, desc):
@@ -937,7 +959,8 @@ if page == "ภาพรวม":
         for col, (label, value, note, tag) in zip(st.columns(4), cards):
             with col:
                 metric(label, f"{value:,}" if isinstance(value, int) else value, note, tag)
-    left, right = st.columns([1.1, 1])
+    tambon_row = st.container(key="row-2up-tambon")
+    left, right = tambon_row.columns(2)
     with left, card("tambon-status"):
         head("สถานะรายตำบล", "สัดส่วนจำนวนแปลงในตัวกรอง รวมกลุ่มข้อมูลไม่พอ")
         fig, counts = status_chart(f); st.plotly_chart(fig, width="stretch")
@@ -965,7 +988,7 @@ if page == "ภาพรวม":
             fig = px.bar(overview.sort_values("burn_pct (%)"), x="burn_pct (%)", y="tambon_name", orientation="h", color_discrete_sequence=[S_RED], labels={"tambon_name": "", "burn_pct (%)": "สัดส่วนพื้นที่ (%)"})
             st.plotly_chart(chart_style(fig), width="stretch")
             st.caption("▲ สัญญาณเผา · ใช้ตารางภาพรวมจาก notebook ตามตำบลที่เลือก · ไม่เปลี่ยนตามตัวกรองสถานะแปลง · ฐานพื้นที่ต่างจากกราฟจำนวนแปลง")
-            st.dataframe(overview, hide_index=True, width="stretch")
+            st.dataframe(overview, hide_index=True, width="stretch", height=240)
         else:
             mean_burn = f[~f["display_status"].eq("ข้อมูลไม่เพียงพอ")].groupby("tambon_name", as_index=False)["burn_pct"].mean().dropna()
             if mean_burn.empty:
@@ -974,7 +997,8 @@ if page == "ภาพรวม":
                 fig = px.bar(mean_burn.sort_values("burn_pct"), x="burn_pct", y="tambon_name", orientation="h", color_discrete_sequence=[S_RED], labels={"tambon_name": "", "burn_pct": "ค่าเฉลี่ยต่อแปลง (%)"})
                 st.plotly_chart(chart_style(fig), width="stretch")
             st.caption("▲ สัญญาณเผา · ค่าเฉลี่ย burn_pct ต่อแปลงที่ไม่อยู่กลุ่มข้อมูลไม่พอ · ไม่ใช่สัดส่วนพื้นที่เผาทั้งตำบล · เพิ่ม CSV ภาพรวมเพื่อแสดงผลระดับพื้นที่")
-    left, right = st.columns([1.2, 1])
+    map_row = st.container(key="row-2up-mapscatter")
+    left, right = map_row.columns(2)
     with left, card("map"):
         head("แผนที่พื้นที่ศึกษา"); show_map(f)
     with right, card("scatter"):
@@ -1064,9 +1088,10 @@ elif page == "คุณภาพข้อมูล":
         reason_raw = f["exclusion_reason"].fillna("").astype(str).str.strip()
         no_cropland = reason_raw.str.contains("ไม่มี cropland pixel", regex=False)
         no_image = reason_raw.str.contains("มี cropland แต่ไม่มีภาพ", regex=False)
-        cq1, cq2 = st.columns(2)
-        with cq1: metric("ไม่มี cropland pixel", f"{int(no_cropland.sum()):,}", "ไม่ใช่พื้นที่เกษตรตาม ESA WorldCover เลย", ("!", S_AMBER))
-        with cq2: metric("มี cropland แต่ไม่มีภาพใช้ได้", f"{int(no_image.sum()):,}", "เมฆบัง/ไม่มีข้อมูลในช่วงที่ต้องใช้", ("!", S_AMBER))
+        with st.container(key="row-2up-reasons"):
+            cq1, cq2 = st.columns(2)
+            with cq1: metric("ไม่มี cropland pixel", f"{int(no_cropland.sum()):,}", "ไม่ใช่พื้นที่เกษตรตาม ESA WorldCover เลย", ("!", S_AMBER))
+            with cq2: metric("มี cropland แต่ไม่มีภาพใช้ได้", f"{int(no_image.sum()):,}", "เมฆบัง/ไม่มีข้อมูลในช่วงที่ต้องใช้", ("!", S_AMBER))
         reasons = reason_raw[f["review_flag"]].replace("", "ธงตรวจสอบ/สถานะข้อมูลไม่พอ แต่ไม่มีเหตุผลคัดออก")
         counts = reasons.value_counts().rename_axis("เหตุผล").reset_index(name="จำนวนแปลง")
         st.dataframe(counts, hide_index=True, width="stretch")
@@ -1127,9 +1152,11 @@ elif page == "ผลประเมิน":
                 for col, (label, value, note, tag) in zip(st.columns(3), scope_cards):
                     with col:
                         metric(label, value, note, tag)
-            st.caption(f"ช่วงเทียบ: {vstart} ถึงก่อนวันที่ {vend} (ไม่รวมวันสิ้นสุด) · เกณฑ์เทียบ: {val_metrics.get('support', 'ไม่ระบุ')}")
-            st.caption(f"ไฟล์อ้างอิงฝั่ง GISTDA: {val_metrics.get('reference_files', 'ไม่ระบุ')} · ประเภทการเทียบ: {val_metrics.get('comparison_type', 'ไม่ระบุ')}")
-            st.caption(f"plot_label_IoU รวม = {val_metrics['plot_label_IoU']*100:.1f}% — นี่คือ IoU ของ \u201cชุดแปลงที่จัดเป็น Burn\u201d (เทียบชุดแปลง) ไม่ใช่ spatial IoU ของพื้นที่ไหม้จริงบนแผนที่")
+            note_group([
+                f"ช่วงเทียบ: {vstart} ถึงก่อนวันที่ {vend} (ไม่รวมวันสิ้นสุด) · เกณฑ์เทียบ: {val_metrics.get('support', 'ไม่ระบุ')}",
+                f"ไฟล์อ้างอิงฝั่ง GISTDA: {val_metrics.get('reference_files', 'ไม่ระบุ')} · ประเภทการเทียบ: {val_metrics.get('comparison_type', 'ไม่ระบุ')}",
+                f"plot_label_IoU รวม = {val_metrics['plot_label_IoU']*100:.1f}% — นี่คือ IoU ของ \u201cชุดแปลงที่จัดเป็น Burn\u201d (เทียบชุดแปลง) ไม่ใช่ spatial IoU ของพื้นที่ไหม้จริงบนแผนที่",
+            ])
 
     if confusion is not None:
         with card("eval-confusion"):
