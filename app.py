@@ -727,7 +727,9 @@ def show_map(frame, limit=12000):
     fig.update_traces(marker=dict(size=7, opacity=.75))
     fig.update_layout(height=430, margin=dict(l=0, r=0, t=0, b=0), font=dict(family=FONT_PLOT, color=INK),
                       legend=dict(title=None, orientation="h", bgcolor="rgba(252,247,248,.88)", bordercolor=LINE, borderwidth=1),
-                      hoverlabel=dict(bgcolor=BG, bordercolor=LINE, font=dict(family=FONT_PLOT, color=INK)))
+                      # Plotly's hover tooltip box has no padding control in the Python API (bgcolor/bordercolor/
+                      # font/align only) — font_size is the only lever that visibly loosens it.
+                      hoverlabel=dict(bgcolor=BG, bordercolor=LINE, font=dict(family=FONT_PLOT, color=INK, size=13)))
     st.plotly_chart(fig, width="stretch")
     st.caption(f"จุดกึ่งกลางแปลง {len(sampled):,} / {len(located):,} จุดที่มีพิกัด · ขาดพิกัด {len(frame)-len(located):,} แปลง · ไม่ใช่ขอบเขตแปลง" + (" · สุ่มเพื่อให้แผนที่โหลดเร็ว; ตัวเลขสรุปใช้ข้อมูลครบ" if len(sampled) < len(located) else ""))
 
@@ -988,7 +990,7 @@ if page == "ภาพรวม":
             fig = px.bar(overview.sort_values("burn_pct (%)"), x="burn_pct (%)", y="tambon_name", orientation="h", color_discrete_sequence=[S_RED], labels={"tambon_name": "", "burn_pct (%)": "สัดส่วนพื้นที่ (%)"})
             st.plotly_chart(chart_style(fig), width="stretch")
             st.caption("▲ สัญญาณเผา · ใช้ตารางภาพรวมจาก notebook ตามตำบลที่เลือก · ไม่เปลี่ยนตามตัวกรองสถานะแปลง · ฐานพื้นที่ต่างจากกราฟจำนวนแปลง")
-            st.dataframe(overview, hide_index=True, width="stretch", height=240)
+            st.dataframe(overview, hide_index=True, width="stretch", height=170)
         else:
             mean_burn = f[~f["display_status"].eq("ข้อมูลไม่เพียงพอ")].groupby("tambon_name", as_index=False)["burn_pct"].mean().dropna()
             if mean_burn.empty:
