@@ -2,9 +2,7 @@
 base = "light"
 primaryColor = "#A31621"
 backgroundColor = "#FCF7F8"
-secondaryBackgroundColor = "#F1ECEF"
-textColor = "#26303B"
-font = "sans serif"
-
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#24262B"
 [server]
-maxUploadSize = 100
+maxUploadSize = 50
