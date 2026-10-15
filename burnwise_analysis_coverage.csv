@@ -1,0 +1,2 @@
+﻿n_total,n_analysis_eligible,n_pending_image,analysis_coverage_pct,n_access_ready,n_image_and_access_ready,min_valid_observation_pct,policy
+47316,1229,46087,2.5974300448051397,0,0,80.0,image eligibility only; review flags do not automatically exclude
