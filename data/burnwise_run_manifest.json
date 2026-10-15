@@ -1,0 +1,35 @@
+{
+  "pipeline_version": "burnwise_review_v2",
+  "pre_start": "2025-08-01",
+  "pre_end_exclusive": "2025-11-01",
+  "post_start": "2026-01-01",
+  "post_end_exclusive": "2026-02-01",
+  "threshold": -0.23989725959625657,
+  "image_method": {
+    "pipeline_version": "burnwise_review_v2",
+    "mask_version": "SCL_QA60_daily_reflectance_v3",
+    "scene_cloud_max": 60,
+    "min_observations": 3,
+    "scl_excluded": [
+      0,
+      1,
+      3,
+      7,
+      8,
+      9,
+      10,
+      11
+    ],
+    "observation_unit": "unique_UTC_day",
+    "area_support": "pixel_centers_unweighted"
+  },
+  "ndvi_pre_min": 0.3,
+  "ndvi_post_max": 0.3,
+  "aoi_sha256": "1830534edcc426c38bf8d3a7305ba61d0498b7982ba15404675b82c764ab33af",
+  "ftw_sha256": "d3419d22b4b3877d00d000a7ecf2337a78834cdb206e2f3c3cd81475fc9075c2",
+  "n_pre_scenes": 8,
+  "n_post_scenes": 13,
+  "n_pre_days": 6,
+  "n_post_days": 12,
+  "requires_field_verification": true
+}
