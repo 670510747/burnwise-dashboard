@@ -23,7 +23,15 @@ def load_bundle():
     if not path.exists():path=DATA/'burnwise_master_plots.csv'
     b=path.read_bytes()
     if b.startswith(b'version https://git-lfs'):raise ValueError('Git LFS pointer: actual data file is missing.')
-    if b[:2]==b'\x1f\x8b':b=gzip.decompress(b)
+    if b[:2]==b'\x1f\x8b':
+        try:
+            b=gzip.decompress(b)
+        except (EOFError, OSError) as exc:
+            raise ValueError(
+                'Data archive is damaged or incomplete. Replace data/' + path.name +
+                ' with the verified file from the corrected app bundle, then restart the app. '
+                'ไฟล์ข้อมูลบีบอัดเสียหรือไม่ครบ กรุณาแทนที่ด้วยไฟล์จากชุดแก้ไขแล้วเริ่มแอปใหม่'
+            ) from exc
     d=pd.read_csv(io.BytesIO(b),dtype={'plot_id':'string','tambon_id':'string'})
     required={'plot_id','burn_status','tambon_name','burn_pct','plot_area_rai','analysis_eligible'}
     if required-set(d):raise ValueError('Missing columns: '+', '.join(sorted(required-set(d))))
