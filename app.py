@@ -20,12 +20,14 @@ import gzip
 import io
 import json
 import hashlib
+import base64
 import re
 import unicodedata
 from urllib.parse import quote
 import numpy as np
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
 st.set_page_config(page_title="BurnWise · ท่าตะโก", page_icon="🔥", layout="wide", initial_sidebar_state="expanded")
@@ -58,7 +60,7 @@ BG, LINE, BRAND, SEC, SKY = "#FCF7F8", "#CED3DC", "#A31621", "#4E8098", "#90C2E7
 INK, MUTED = "#26303B", "#5B6675"
 # ── Data-status colours: burn signal uses the brand red; meaning is always carried by icon + text ──
 S_RED, S_GREEN, S_AMBER, S_GREY = BRAND, "#4B8F6D", "#D8A94A", "#9AA5B4"
-FONT_PLOT = "Noto Sans Thai, Sarabun, sans-serif"
+FONT_PLOT = "BWThai, Noto Sans Thai, Sarabun, sans-serif"
 
 def _svg_mask(paths):
     """Inline stroke icon as a CSS url() so it can be used with mask-image and recoloured by background."""
@@ -85,7 +87,7 @@ PAGES = ["ภาพรวม", "สำรวจแปลง", "คุณภา�
 PAGE_ICON = {"ภาพรวม": "space_dashboard", "สำรวจแปลง": "map", "คุณภาพข้อมูล": "fact_check", "ผลประเมิน": "verified", "เกี่ยวกับโครงการ": "info"}
 
 CSS = '''<style>
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&display=swap');
+
 :root{color-scheme:light;--bg:#FCF7F8;--line:#CED3DC;--brand:#A31621;--brand-d:#85101A;--sec:#4E8098;--sky:#90C2E7;--ink:#26303B;--muted:#5B6675;
 --raise:4px 5px 12px rgba(120,132,150,.20),-4px -4px 10px rgba(255,255,255,.92);
 --raise-s:3px 3px 8px rgba(120,132,150,.17),-3px -3px 7px rgba(255,255,255,.92);
@@ -337,6 +339,16 @@ button:focus-visible{outline:3px solid rgba(144,194,231,.95)!important;outline-o
 </style>'''
 CSS = CSS.replace("@@FILTER@@", ICON_FILTER).replace("@@UPLOAD@@", ICON_UPLOAD).replace("@@CLOUD@@", ICON_CLOUD)
 st.markdown(CSS, unsafe_allow_html=True)
+PREMIUM_CSS = '<style>\n/* Shared brand foundation. All analytics-specific rules live in the keyed overview. */\n:root{color-scheme:light;--ink:#172033;--muted:#64748B;--bg:#FCF7F8;--line:#CED3DC;--brand:#A31621;--sec:#4E8098;--sky:#90C2E7;}\n.stApp{background:#FCF7F8!important;color:#172033!important;}\n.block-container,[data-testid="stMainBlockContainer"]{max-width:1500px!important;background:transparent!important;border:0!important;box-shadow:none!important;border-radius:0!important;padding:26px 28px 36px!important;margin-top:44px!important;}\n[data-testid="stSidebarContent"]{background:#fff!important;border:1px solid #CED3DC!important;box-shadow:0 4px 20px #17203306!important;}\n.st-key-topbar{background:#fff!important;border:1px solid #CED3DC!important;border-radius:20px!important;box-shadow:0 4px 18px #17203306!important;padding:12px 18px!important;}\n.st-key-topbar [data-testid="stRadio"] label{background:transparent!important;border:1px solid transparent!important;box-shadow:none!important;border-radius:12px!important;padding:10px 12px!important;transition:background .18s ease,border-color .18s ease;}\n.st-key-topbar [data-testid="stRadio"] label:hover{background:#F5F7FA!important;}\n.st-key-topbar [data-testid="stRadio"] label:has(input:checked){background:#FBEBED!important;border-color:#F0CDD1!important;box-shadow:inset 0 -2px 0 #A31621!important;}\n.st-key-topbar [data-testid="stRadio"] label:has(input:checked) *{color:#A31621!important;}\n.st-key-topbar .brand .logo{box-shadow:none!important;border-radius:12px;}\n.bw-nav-status{display:flex;flex-direction:column;align-items:flex-end;gap:5px;font-size:11px;color:#64748B;white-space:normal;}\n.bw-nav-status strong{font-weight:600;color:#4E8098;}\n.bw-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:8px;font-size:11px;font-weight:600;line-height:1.45;border:1px solid #D9E5EE;background:#EDF5FB;color:#365F76;white-space:normal;}\n.bw-badge.warn{color:#975006;border-color:#F4D5AA;background:#FFF6E8;}\n.bw-badge.neutral{color:#64748B;border-color:#CED3DC;background:#F8FAFC;}\n.st-key-premium-overview{container-type:inline-size;color:#172033;}\n.st-key-premium-overview [data-testid="stVerticalBlock"]{gap:20px;}\n.st-key-premium-overview>[data-testid="stVerticalBlock"]{gap:30px;}\n.st-key-premium-overview [class*="st-key-card-"]{background:#fff!important;border:1px solid #CED3DC!important;border-radius:20px!important;padding:24px!important;box-shadow:0 4px 18px #17203304!important;}\n.st-key-premium-overview .h-card{font-size:19px;font-weight:700;color:#172033;line-height:1.45;}\n.st-key-premium-overview .desc{font-size:13px;line-height:1.65;color:#64748B;}\n.st-key-premium-overview [data-testid="stMarkdownContainer"]:has(>.bw-hero),\n.st-key-premium-overview [data-testid="stMarkdownContainer"]:has(>.bw-kpis),\n.st-key-premium-overview [data-testid="stMarkdownContainer"]:has(>.bw-info){margin-bottom:0!important;}\n.bw-hero{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;}\n.bw-hero h1{font-size:30px!important;line-height:1.35!important;letter-spacing:-.5px;margin:0!important;padding:0!important;color:#172033!important;font-weight:750!important;}\n.bw-hero p{font-size:14px;color:#64748B;margin:8px 0 0!important;line-height:1.65;}\n.bw-hero .bw-hero-tags{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;max-width:40%;}\n.bw-info{display:flex;align-items:flex-start;gap:10px;background:#EFF6FB;border:1px solid #D5E7F3;border-radius:14px;padding:13px 16px;color:#36566E;font-size:13px;line-height:1.75;}\n.bw-info .bw-info-icon{flex:none;font-size:16px;font-weight:700;}\n.bw-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:22px;}\n.bw-kpi{position:relative;background:#fff;border:1px solid #CED3DC;border-radius:20px;padding:24px;min-height:188px;box-sizing:border-box;display:flex;flex-direction:column;transition:transform .18s ease,box-shadow .18s ease;}\n.bw-kpi:hover{transform:translateY(-3px);box-shadow:0 9px 25px #1720330B;}\n.bw-kpi .bw-kpi-label{font-size:13px;color:#64748B;font-weight:600;min-height:25px;padding-right:32px;line-height:1.55;}\n.bw-kpi strong{font-size:36px;line-height:1.2;letter-spacing:-1px;color:var(--tone);font-weight:750;margin:13px 0 9px;font-variant-numeric:tabular-nums;}\n.bw-kpi small{display:block;font-size:12px;color:#64748B;line-height:1.65;margin-top:auto;}\n.bw-kpi .bw-kpi-icon{position:absolute;right:20px;top:21px;display:grid;place-items:center;width:29px;height:29px;background:var(--tint);border-radius:9px;color:var(--tone);}\n.bw-kpi-icon svg{width:17px;height:17px;}\n.bw-progress{height:5px;border-radius:6px;background:#EDF0F4;overflow:hidden;margin-top:14px;}\n.bw-progress>span{height:100%;display:block;border-radius:6px;background:var(--tone,#4E8098);}\n.bw-inline-stats{display:flex;gap:24px;flex-wrap:wrap;color:#64748B;font-size:12px;}\n.bw-inline-stats strong{display:block;color:#172033;font-size:18px;line-height:1.6;font-variant-numeric:tabular-nums;}\n.bw-quality-row{padding:12px 0;border-bottom:1px solid #EEF1F5;}\n.bw-quality-row:last-child{border-bottom:0;}\n.bw-quality-top{display:flex;justify-content:space-between;gap:12px;align-items:center;font-size:13px;color:#172033;}\n.bw-quality-top>span:first-child{font-weight:600;}\n.bw-quality-help{font-size:12px;color:#64748B;line-height:1.6;margin-top:4px;}\n.bw-quality-row .bw-progress{margin-top:8px;}\n.bw-warning{border-left:3px solid #D97706;background:#FFF8ED;color:#87500C;padding:12px 14px;border-radius:0 10px 10px 0;font-size:12px;line-height:1.75;}\n.st-key-premium-overview [data-testid="stButton"] button,.st-key-premium-overview [data-testid="stDownloadButton"] button{border-radius:12px!important;box-shadow:none!important;transition:background .18s ease,transform .18s ease;}\n.st-key-premium-overview [data-testid="stButton"] button:hover,.st-key-premium-overview [data-testid="stDownloadButton"] button:hover{transform:translateY(-1px);}\n.st-key-premium-overview [data-baseweb="select"]>div{box-shadow:none!important;background:#fff!important;}\n.st-key-premium-overview [data-testid="stExpander"] details{border:1px solid #CED3DC;background:#fff;color:#172033;border-radius:14px;}\n.bw-table-scroll{overflow-x:auto;border:1px solid #E5E9EF;border-radius:12px;}\n.bw-monthly-table{width:100%;min-width:850px;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums;}\n.bw-monthly-table th{text-align:right;padding:13px 15px;background:#F7F9FC;color:#64748B;font-size:11px;font-weight:600;border-bottom:1px solid #E5E9EF;white-space:nowrap;}\n.bw-monthly-table td{text-align:right;padding:15px;border-bottom:1px solid #EDF1F5;color:#172033;white-space:nowrap;}\n.bw-monthly-table th:first-child,.bw-monthly-table td:first-child{text-align:left;}\n.bw-monthly-table td:last-child,.bw-monthly-table th:last-child{text-align:left;}\n.bw-monthly-table tr:last-child td{border-bottom:0;}\n.bw-monthly-table tbody tr:hover{background:#FAFBFD;}\n.bw-monthly-table tr.low td:first-child{box-shadow:inset 3px 0 0 #D97706;}\n.st-key-premium-overview [data-testid="stHorizontalBlock"]{gap:24px!important;}\n.st-key-overview-analysis [data-testid="stHorizontalBlock"]{flex-wrap:nowrap!important;}\n.st-key-overview-analysis [data-testid="stColumn"]{flex:1 1 0!important;min-width:0!important;}\n@container(max-width:1050px){.bw-kpis{gap:18px;}.bw-kpi{padding:20px;}.bw-kpi strong{font-size:31px;}}\n@container(max-width:850px){.bw-kpis{grid-template-columns:repeat(2,minmax(0,1fr));}.st-key-overview-analysis [data-testid="stHorizontalBlock"]{flex-wrap:wrap!important;}.st-key-overview-analysis [data-testid="stColumn"]{flex:1 1 100%!important;}}\n@container(max-width:520px){.bw-hero{flex-direction:column;}.bw-hero .bw-hero-tags{justify-content:flex-start;max-width:100%;}.bw-hero h1{font-size:25px!important;}.bw-kpis{gap:12px;}.bw-kpi{padding:17px;min-height:182px;}.bw-kpi strong{font-size:29px;}.bw-kpi .bw-kpi-label{padding-right:0;font-size:12px;}.bw-kpi .bw-kpi-icon{display:none;}.st-key-premium-overview [class*="st-key-card-"]{padding:18px!important;}}\n@media(max-width:640px){.block-container,[data-testid="stMainBlockContainer"]{padding:18px 10px 24px!important;width:100%!important;}.bw-nav-status{align-items:flex-start;}.st-key-topbar{padding:10px!important;}.st-key-topbar [data-testid="stRadio"] label{padding:9px!important;}.st-key-topbar [data-testid="stRadio"] label p{font-size:12px!important;}}\n@media(prefers-reduced-motion:reduce){.bw-kpi,.st-key-premium-overview button{transition:none!important;transform:none!important;}}\n</style>\n'
+st.markdown(PREMIUM_CSS, unsafe_allow_html=True)
+@st.cache_data(show_spinner=False)
+def local_font_css():
+    path = BASE / "assets/NotoSansThai.ttf"
+    if not path.is_file():
+        return ""
+    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    return "<style>@font-face{font-family:BWThai;src:url(data:font/ttf;base64,"+encoded+") format('truetype');font-weight:100 900;font-display:swap}.stApp,.stApp p,.stApp label,.stApp li,.stApp td,.stApp th,.stApp h1,.stApp h2,.stApp h3,.stApp h4,.stApp button,.stApp input,.stApp textarea,.stApp [data-baseweb]{font-family:BWThai,'Noto Sans Thai',sans-serif}</style>"
+st.markdown(local_font_css(),unsafe_allow_html=True)
 
 
 # ── small UI helpers ─────────────────────────────────────────────────────────
@@ -843,10 +855,184 @@ def filters_wait(msg):
         st.caption(msg)
 
 
+@st.cache_data(show_spinner=False)
+def overview_master(path_str, mtime, size, expected_sha):
+    path = Path(path_str)
+    if not expected_sha or hashlib.sha256(path.read_bytes()).hexdigest() != expected_sha:
+        raise ValueError("ข้อมูลรายแปลงไม่ตรงกับ manifest ของรอบนี้ กรุณาใช้ data/ จากชุดเดียวกัน")
+    frame, _, _ = prepare(read_csv(path))
+    return frame
+
+@st.cache_data(show_spinner=False)
+def overview_csv(path_str, mtime, size):
+    return pd.read_csv(path_str, encoding="utf-8-sig")
+
+def overview_table(name):
+    path = DATA_DIR / name
+    stat = path.stat()
+    return overview_csv(str(path), stat.st_mtime_ns, stat.st_size)
+
+def overview_badge(text, tone="info", raw=None):
+    return f'<span class="bw-badge {tone}" title="{escape(str(raw if raw is not None else text), quote=True)}">{escape(str(text))}</span>'
+
+def overview_plot_style(fig, height=280):
+    fig.update_layout(template="plotly_white",height=height,paper_bgcolor="#FFFFFF",plot_bgcolor="#FFFFFF",
+        font=dict(family=FONT_PLOT,size=12,color="#64748B"),margin=dict(l=10,r=24,t=16,b=20),
+        hoverlabel=dict(bgcolor="#FFFFFF",font_color="#172033"),legend=dict(orientation="h",y=-.18,title=None))
+    fig.update_xaxes(showgrid=False,zeroline=False,automargin=True)
+    fig.update_yaxes(gridcolor="#EEF1F5",zeroline=False,automargin=True)
+    return fig
+
+def render_premium_overview():
+    """Presentation only: existing schema, masks, labels, thresholds and source files remain unchanged."""
+    master_path = resolve_master_path()
+    try:
+        if uploaded is not None:
+            frame, _, _ = prepare(read_csv(io.BytesIO(uploaded.getvalue())))
+            source_label = "ไฟล์ที่อัปโหลดใน session นี้"
+            # Existing upload flow stays available. Evaluation files always describe the bundled run.
+            uploaded_source = True
+        elif master_path is not None:
+            stat = master_path.stat()
+            with st.spinner("กำลังโหลดผลรอบล่าสุด…"):
+                frame = overview_master(str(master_path),stat.st_mtime_ns,stat.st_size,RUN_META.get("master_sha256"))
+            source_label = "ข้อมูลรายแปลงจากรอบที่ส่งออก"
+            uploaded_source = False
+        else:
+            frame = None
+            source_label = "ผลสรุปจาก notebook · รอ master"
+            uploaded_source = False
+        monthly = overview_table("burnwise_monthly_final.csv").copy()
+        flags = overview_table("burnwise_quality_flags.csv")
+        checks = overview_table("burnwise_method_review_checklist.csv")
+        vm = overview_table("burnwise_gistda_validation_metrics.csv").iloc[0]
+    except (ValueError,OSError,KeyError) as exc:
+        st.error(f"โหลดข้อมูลภาพรวมไม่ได้: {exc}")
+        return
+    if frame is not None:
+        total = len(frame)
+        status = frame["burn_status"].value_counts()
+        n_burn, n_no = int(status.get("Burn",0)),int(status.get("No Burn",0))
+        if "analysis_eligible" in frame:
+            ready = frame["analysis_eligible"].astype(str).str.strip().str.lower().isin(["true","1","1.0"])
+        else:
+            ready = frame["burn_status"].isin(["Burn","No Burn"])
+        n_ready = int(ready.sum())
+        n_pending = total - n_ready
+        access_ready = int(frame["access_gap_index"].notna().sum())
+    else:
+        total,n_ready,n_pending,n_burn,n_no,access_ready=[int(SNAPSHOT[k]) for k in ["n_total","n_analysis_eligible","n_pending_image","n_burn","n_no_burn","n_access_ready"]]
+    coverage = n_ready/total*100 if total else 0
+    missing = n_pending/total*100 if total else 0
+    classified = n_burn+n_no
+    months_th = ["", "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"]
+    month_name = lambda n: months_th[int(n)] if int(n) in range(1,13) else str(n)
+    monthly = monthly.sort_values("month")
+    low = monthly["coverage_flag"].eq("LOW_COVERAGE")
+    lowest = monthly.loc[monthly["coverage_pct"].idxmin()] if len(monthly) else None
+    version_match = re.search(r"REVIEWED\((\d+)\)",str(RUN_META.get("source_notebook","")))
+    version = f"REVIEWED({version_match.group(1)})" if version_match else str(RUN_META.get("bundle_source","ไม่ระบุรอบ"))
+    year = str(RUN_META.get("post_start",""))[:4]
+    plot_period = f"{RUN_META.get('post_start','ไม่ระบุ')} ถึงก่อน {RUN_META.get('post_end_exclusive','ไม่ระบุ')}"
+    updates = RUN_META.get("updated_at") or RUN_META.get("last_updated")
+    with st.container(key="premium-overview"):
+        tags = overview_badge(version) + overview_badge("Research screening","neutral")
+        if updates:tags+=overview_badge(str(updates),"neutral")
+        st.markdown(f'<div class="bw-hero"><div><h1>ภาพรวมพื้นที่นำร่อง</h1><p>อำเภอท่าตะโก จังหวัดนครสวรรค์<br>ผลรายแปลง: {escape(plot_period)} · ผลพื้นที่รายเดือน: {escape(month_name(monthly.month.min()))}–{escape(month_name(monthly.month.max()))} {escape(year)}</p></div><div class="bw-hero-tags">{tags}</div></div>',unsafe_allow_html=True)
+        st.markdown('<div class="bw-info"><span class="bw-info-icon" aria-hidden="true">ⓘ</span><span>ผลคัดกรองจากดาวเทียมและผลเทียบผลิตภัณฑ์ GISTDA ยังไม่มี Independent Ground Truth สำหรับยืนยันความแม่นยำอิสระ ส่วนค่า Accuracy, Precision และ Recall ในหน้าผลประเมินแสดงความสอดคล้องกับผลิตภัณฑ์อ้างอิง</span></div>',unsafe_allow_html=True)
+        if uploaded_source:st.warning("KPI ใช้ไฟล์อัปโหลดใน session นี้ ส่วนผลรายเดือนและ GISTDA ยังเป็นรอบที่อยู่ใน data/ จึงไม่ควรอ่านเป็นผลประเมินของไฟล์อัปโหลด")
+        plots_status.markdown(status_html("ok",f"โหลดข้อมูลจริง · {total:,} แปลง",source_label),unsafe_allow_html=True)
+        filters_wait("ภาพรวมแสดงจำนวนทั้งรอบเสมอ ใช้ตัวกรองรายแปลงได้ในหน้าสำรวจแปลง และตัวกรองเดือนในตารางด้านล่าง")
+        icons={"plots":"M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z", "image":"M3 5h18v14H3z M3 16l5-5 4 4 3-3 6 6", "pending":"M12 8v5 M12 16h.01 M12 3L2 21h20z", "burn":"M12 3c0 5 6 6 6 12a6 6 0 1 1-12 0c0-3 2-5 3-6 0 3 2 3 3 4"}
+        specs=[("แปลงทั้งหมด",total,"จำนวนทั้งหมดในรอบข้อมูล", "#172033","#F1F5F9","plots",None),
+            ("ภาพเพียงพอ",n_ready,f"{coverage:.2f}% ของแปลงทั้งหมด","#4E8098","#EDF5FB","image",coverage),
+            ("รอข้อมูลภาพ",n_pending,f"{missing:.2f}% ยังคงอยู่ในฐานข้อมูล","#D97706","#FFF4E3","pending",missing),
+            ("ตรวจพบสัญญาณเผา",n_burn,"ผลคัดกรองในแปลงที่จัดสถานะได้","#A31621","#FCEDEF","burn",None)]
+        html=['<div class="bw-kpis">']
+        for label,value,note,tone,tint,ico,pct in specs:
+            prog=f'<div class="bw-progress" role="progressbar" aria-label="{label}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{pct:.2f}"><span style="width:{pct:.4f}%"></span></div>' if pct is not None else ''
+            html.append(f'<div class="bw-kpi" style="--tone:{tone};--tint:{tint}"><span class="bw-kpi-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="{icons[ico]}"/></svg></span><div class="bw-kpi-label">{label}</div><strong>{value:,}</strong><small>{escape(note)}</small>{prog}</div>')
+        st.markdown(''.join(html)+'</div>',unsafe_allow_html=True)
+        with st.container(key="overview-analysis"):
+            left,right=st.columns([1.05,1])
+            with left,card("overview-burn"):
+                head("Burn Classification Overview","สัดส่วนผลคัดกรองเฉพาะแปลงที่จัดสถานะ Burn / No Burn ได้")
+                if classified:
+                    fig=go.Figure(go.Pie(labels=["ตรวจพบสัญญาณเผา","ไม่เข้าเกณฑ์ตรวจพบ"],values=[n_burn,n_no],hole=.73,sort=False,
+                        marker=dict(colors=["#A31621","#4E8098"],line=dict(color="#FFFFFF",width=4)),textinfo="none",
+                        hovertemplate="%{label}<br>%{value:,.0f} แปลง · %{percent}<extra></extra>"))
+                    fig.update_layout(annotations=[dict(text=f'<b>{classified:,}</b><br><span style="font-size:11px">แปลงที่จัดสถานะได้</span>',showarrow=False,x=.5,y=.5,font=dict(size=24,color="#172033"))],showlegend=True)
+                    st.plotly_chart(overview_plot_style(fig,285),width="stretch",config={"displayModeBar":False},key="overview-donut")
+                else:st.info("ยังไม่มีแปลงที่จัดสถานะ Burn / No Burn ได้")
+                st.markdown(f'<div class="bw-inline-stats"><span><strong>{n_burn/classified*100 if classified else 0:.2f}%</strong>Burn ในแปลงที่จัดสถานะได้</span><span><strong>{n_no/classified*100 if classified else 0:.2f}%</strong>No Burn</span><span title="Threshold จาก manifest ไม่คำนวณใหม่"><strong>{float(RUN_META["threshold"]):.6f}</strong>dNBR threshold</span></div>',unsafe_allow_html=True)
+                st.caption(f"ภาพเพียงพอ {n_ready:,} แปลง · Burn เป็นสัญญาณเข้าเกณฑ์ ยังไม่ยืนยันการเผาจริงหรือเจ้าของแปลง")
+            with right,card("overview-quality"):
+                head("Data Quality & Validation Status","คุณภาพการสังเกตและสถานะหลักฐานของรอบนี้")
+                def quality_row(label,value,help_text,pct=None,tone="info",raw=None):
+                    progress=f'<div class="bw-progress" style="--tone:#4E8098"><span style="width:{float(pct):.4f}%"></span></div>' if pct is not None else ''
+                    st.markdown(f'<div class="bw-quality-row"><div class="bw-quality-top"><span>{escape(label)}</span>{overview_badge(value,tone,raw)}</div><div class="bw-quality-help">{escape(help_text)}</div>{progress}</div>',unsafe_allow_html=True)
+                quality_row("Imagery coverage",f"{coverage:.2f}%",f"{n_ready:,} จาก {total:,} แปลง",coverage)
+                quality_row("Missing imagery",f"{n_pending:,} แปลง",f"{missing:.2f}% ของแปลงทั้งหมด",tone="warn")
+                if lowest is not None:quality_row("Monthly coverage",f"{float(lowest.coverage_pct):.2f}%",f"ต่ำสุดใน{month_name(lowest.month)} · {lowest.coverage_flag}",tone="warn" if lowest.coverage_flag=="LOW_COVERAGE" else "info",raw=lowest.coverage_flag)
+                lineage=str(vm.get("product_lineage_status","PENDING"))
+                quality_row("GISTDA lineage",lineage,"ยังต้องตรวจสอบที่มาและความเป็นอิสระของผลิตภัณฑ์",tone="warn")
+                independent=str(flags["validation_flag"].iloc[0]) if len(flags) else "UNKNOWN"
+                quality_row("Independent ground truth","Pending" if independent=="NOT_INDEPENDENTLY_VALIDATED" else independent,"ยังไม่มีหลักฐานยืนยันความแม่นยำอิสระในชุดข้อมูลนี้",tone="warn",raw=independent)
+                quality_row("Table / raster consistency",str(vm.get("consistency_status","ไม่ระบุ")),f"ต่างเกิน 2 pp: {int(vm.get('f_grid_discrepant_plots',0)):,} แปลง · ป้ายเปลี่ยน: {int(vm.get('f_grid_label_changes',0)):,} แปลง",tone="warn")
+        with card("overview-monthly-trend"):
+            head("Monthly Burn Trend & Coverage","ผลพื้นที่รายเดือนกับความครอบคลุมภาพ แสดงแยกกราฟเพื่อรักษาความต่างของหน่วย")
+            labels=[month_name(x) for x in monthly.month]
+            colors=["#D97706" if x else "#A31621" for x in low]
+            area=go.Figure(go.Bar(x=labels,y=monthly.burned_area_rai,name="พื้นที่สัญญาณเผา (ไร่)",marker_color=colors,customdata=monthly[["coverage_pct","coverage_flag"]].to_numpy(),hovertemplate="%{x}<br>พื้นที่สัญญาณเผา %{y:,.2f} ไร่<br>Coverage %{customdata[0]:.2f}%<br>%{customdata[1]}<extra></extra>"))
+            area.update_yaxes(title_text="พื้นที่ตรวจพบสัญญาณเผา (ไร่)",rangemode="tozero",tickformat=",")
+            area.update_layout(showlegend=True,bargap=.6)
+            st.plotly_chart(overview_plot_style(area,285),width="stretch",config={"displayModeBar":False},key="overview-area-trend")
+            cov=go.Figure(go.Scatter(x=labels,y=monthly.coverage_pct,name="Coverage (%)",mode="lines+markers",line=dict(color="#4E8098",width=2),marker=dict(size=10,color=["#D97706" if x else "#4E8098" for x in low]),customdata=monthly[["coverage_flag"]].to_numpy(),hovertemplate="%{x}<br>Coverage %{y:.2f}%<br>%{customdata[0]}<extra></extra>"))
+            cov.update_yaxes(title_text="Coverage (%)",range=[0,105],ticksuffix="%")
+            cov.update_layout(showlegend=True)
+            st.plotly_chart(overview_plot_style(cov,205),width="stretch",config={"displayModeBar":False},key="overview-coverage-trend")
+            st.markdown('<div class="bw-warning">⚠ สีส้มระบุเดือน LOW_COVERAGE พื้นที่ที่ตรวจพบลดลงในเดือนนั้นอาจเกิดจากภาพไม่เพียงพอ จึงยังสรุปว่าการเผาลดลงจริงไม่ได้ และพื้นที่หลายเดือนอาจซ้ำกัน</div>',unsafe_allow_html=True)
+        with card("overview-monthly-table"):
+            head("Monthly Results","คงผลและรหัสสถานะต้นฉบับครบถ้วน กรองเดือนและเรียงลำดับเพื่อสำรวจข้อมูล")
+            c1,c2,c3=st.columns([1.6,1.4,1])
+            chosen=c1.multiselect("เดือน",monthly.month.tolist(),default=monthly.month.tolist(),format_func=month_name,key="overview-month-filter")
+            sort_labels={"เดือน":"month","พื้นที่สัญญาณเผา":"burned_area_rai","Coverage":"coverage_pct","GISTDA":"gistda_area_rai","BW/GISTDA":"bw_gistda_ratio"}
+            sorting=c2.selectbox("เรียงตาม",list(sort_labels),key="overview-month-sort")
+            descending=c3.checkbox("มากไปน้อย",key="overview-month-desc")
+            shown=monthly[monthly.month.isin(chosen)].sort_values(sort_labels[sorting],ascending=not descending)
+            if shown.empty:st.info("ยังไม่ได้เลือกเดือน เลือกอย่างน้อยหนึ่งเดือนเพื่อแสดงตาราง")
+            else:
+                html=['<div class="bw-table-scroll" role="region" aria-label="ผลรายเดือน เลื่อนแนวนอนได้" tabindex="0"><table class="bw-monthly-table"><thead><tr><th>เดือน</th><th>สัญญาณเผา (ไร่)</th><th>Coverage (%)</th><th>GISTDA (ไร่)</th><th>BW / GISTDA</th><th>Coverage status</th></tr></thead><tbody>']
+                for row in shown.itertuples():
+                    low_row=row.coverage_flag=="LOW_COVERAGE"
+                    status_label="ภาพครอบคลุมต่ำ" if low_row else "Coverage ตามเกณฑ์คัดกรอง" if row.coverage_flag=="COVERAGE_ABOVE_SCREENING_THRESHOLD" else str(row.coverage_flag)
+                    html.append(f'<tr class="{"low" if low_row else ""}"><td>{escape(month_name(row.month))}</td><td>{row.burned_area_rai:,.2f}</td><td>{row.coverage_pct:,.2f}%</td><td>{row.gistda_area_rai:,.2f}</td><td>{row.bw_gistda_ratio:,.3f}</td><td>{overview_badge(status_label,"warn" if low_row else "info",row.coverage_flag)}</td></tr>')
+                st.markdown(''.join(html)+'</tbody></table></div>',unsafe_allow_html=True)
+            st.caption(f"แสดง {len(shown)} / {len(monthly)} เดือน · วางเมาส์บนป้ายสถานะเพื่อดูรหัสต้นฉบับ · เลื่อนตารางแนวนอนได้บนมือถือ")
+            st.download_button("ดาวน์โหลด CSV ตามตัวกรอง",csv_bytes(shown),"burnwise_monthly_filtered.csv","text/csv",icon=":material/download:",key="overview-monthly-csv")
+            st.caption("BW/GISTDA เป็นอัตราส่วนพื้นที่ ไม่ใช่ Accuracy, Precision หรือ Recall · GISTDA และ ratio ใน saved output มีทศนิยม 3 ตำแหน่ง")
+            with st.expander("ข้อมูลต้นฉบับและ Coverage Flag ทุกคอลัมน์"):
+                st.dataframe(shown,hide_index=True,width="stretch")
+                st.download_button("ดาวน์โหลดผลรายเดือนทั้งหมด",csv_bytes(monthly),"burnwise_monthly_final.csv","text/csv",key="overview-monthly-all")
+        with st.expander("Methodology Details"):
+            rows=[("Pre period",f"{RUN_META.get('pre_start','ไม่ระบุ')} ถึงก่อน {RUN_META.get('pre_end_exclusive','ไม่ระบุ')}"),("Post period",plot_period),("Pre observations",f"{RUN_META.get('n_pre_scenes','ไม่ระบุ')} scenes / {RUN_META.get('n_pre_days','ไม่ระบุ')} unique UTC days"),("Post observations",f"{RUN_META.get('n_post_scenes','ไม่ระบุ')} scenes / {RUN_META.get('n_post_days','ไม่ระบุ')} unique UTC days"),("dNBR threshold",str(RUN_META.get('threshold','ไม่ระบุ'))),("Threshold source",str(RUN_META.get('threshold_source','ไม่ระบุ'))),("Access Gap available",f"{access_ready:,} แปลง")]
+            st.dataframe(pd.DataFrame(rows,columns=["รายการ","ค่าจากรอบข้อมูล"]),hide_index=True,width="stretch")
+            st.caption("จำนวน scenes หรือวันใน collection ไม่ได้แปลว่าทุกพิกเซลมีภาพใช้ได้เท่ากัน · เกณฑ์จำแนกและค่า threshold อ่านจากผลเดิม ไม่มีการคำนวณใหม่บนเว็บ")
+        with st.expander("Data Limitations & Research Transparency"):
+            st.dataframe(checks,hide_index=True,width="stretch")
+            st.dataframe(flags,hide_index=True,width="stretch")
+            st.write("วิธี composite, observation rule และ area support รายเดือนยังต้องตรวจสอบ ห้ามบวกผลหลายเดือนเป็นพื้นที่ไม่ซ้ำ หรือใช้ No Burn เป็นหลักฐานการไถกลบ")
+            st.write("ผลพื้นที่รายเดือนเริ่มตามเดือนที่มีในไฟล์ ไม่เติมเดือนที่ขาดด้วยศูนย์ และยังไม่มีจุดรับซื้อที่ยืนยันเพื่อนำไปแนะนำมาตรการโลจิสติกส์")
+        st.markdown(f'<div class="footer">BurnWise · {escape(version)} · ผลคัดกรองเพื่อช่วยตรวจสอบหลักฐาน</div>',unsafe_allow_html=True)
+
+
 def render_current_summary(page):
     """Use only current saved outputs; the absence of a new master never loads an older run."""
     if page == "สำรวจแปลง":
         return
+    if page == "ภาพรวม":
+        render_premium_overview()
+        st.stop()
     def table_file(filename):
         return pd.read_csv(DATA_DIR / filename)
     def download_frame(frame, name):
@@ -943,6 +1129,10 @@ with top:
         c_brand.markdown(f'<div class="brand"><span class="logo"></span><div><div class="b-name">BurnWise{badge}</div><div class="b-sub">อำเภอท่าตะโก · Field Insights</div></div></div>', unsafe_allow_html=True)
         with c_nav:
             page = st.radio("หน้าเว็บ", PAGES, horizontal=True, label_visibility="collapsed", format_func=lambda p: f":material/{PAGE_ICON[p]}: {p}")
+        nav_version = re.search(r"REVIEWED\((\d+)\)",str(RUN_META.get("source_notebook","")))
+        nav_label = f"REVIEWED({nav_version.group(1)})" if nav_version else str(RUN_META.get("bundle_source",""))
+        nav_period = f"{RUN_META.get('post_start','')} – {RUN_META.get('post_end_exclusive','')}"
+        c_dl.markdown(f'<div class="bw-nav-status"><strong>{escape(nav_label)}</strong><span title="วันสิ้นสุดแบบไม่รวมวันสุดท้าย">{escape(nav_period)}</span></div>',unsafe_allow_html=True)
         dl_slot = c_dl.empty()
 
 path = resolve_master_path()
