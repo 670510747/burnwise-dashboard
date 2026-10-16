@@ -1,0 +1,23 @@
+{
+  "source_notebook": "BurnWise_Team_Merged_REVIEWED(4).ipynb",
+  "source_kind": "saved_notebook_outputs",
+  "bundle_source": "reviewed4",
+  "n_total": 47311,
+  "n_analysis_eligible": 42190,
+  "n_pending_image": 5121,
+  "n_burn": 3403,
+  "n_no_burn": 38787,
+  "n_access_ready": 0,
+  "threshold": 0.20999151812466055,
+  "threshold_source": "Positive-dNBR Otsu (experimental baseline)",
+  "pre_start": "2025-10-01",
+  "pre_end_exclusive": "2026-01-01",
+  "post_start": "2026-01-01",
+  "post_end_exclusive": "2026-02-01",
+  "n_pre_scenes": 26,
+  "n_post_scenes": 13,
+  "n_pre_days": 22,
+  "n_post_days": 12,
+  "master_available": true,
+  "master_sha256": "b69037e9236968380566bd7ac4e38a0c08ea79f899a1f93cbe4ab1231c2a3f14"
+}
