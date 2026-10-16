@@ -1,0 +1,5 @@
+month,crop_area_rai,valid_area_rai,burned_area_rai,coverage_pct,burn_pct_of_valid,status,gistda_area_rai,bw_gistda_ratio,coverage_flag,source_note
+2,467348.540094,449175.117179,29963.087149,96.111377,6.670692,PRELIMINARY,14544.949,2.06,COVERAGE_ABOVE_SCREENING_THRESHOLD,Saved notebook output: O3.7 + O3.17; GISTDA area and ratio shown to 3 decimals
+3,467348.540094,466435.40963,62721.133662,99.804615,13.446907,PRELIMINARY,9681.828,6.478,COVERAGE_ABOVE_SCREENING_THRESHOLD,Saved notebook output: O3.7 + O3.17; GISTDA area and ratio shown to 3 decimals
+4,467348.540094,466435.406397,134547.429439,99.804614,28.845887,PRELIMINARY,68178.133,1.973,COVERAGE_ABOVE_SCREENING_THRESHOLD,Saved notebook output: O3.7 + O3.17; GISTDA area and ratio shown to 3 decimals
+5,467348.540094,35157.684372,13410.988778,7.522798,38.145256,LOW_COVERAGE,6277.0,2.137,LOW_COVERAGE,Saved notebook output: O3.7 + O3.17; GISTDA area and ratio shown to 3 decimals

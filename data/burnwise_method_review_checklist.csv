@@ -1,0 +1,7 @@
+﻿component,status,action
+Composite method,REVIEW,Verify January formula against February-May
+Valid observations,REVIEW,Confirm pre/post unique UTC day rules
+Cropland,CHECK,Confirm identical binary mask definition
+Area support,REVIEW,Distinguish pixel-center vs pixel-area sums
+May coverage,LOW_COVERAGE,Review O3.14 sensitivity results
+GISTDA product lineage,PENDING,Complete source and coverage verification

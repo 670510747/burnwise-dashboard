@@ -1,0 +1,6 @@
+﻿month,threshold,ndvi_pre_min,ndvi_post_max,composite_method,observation_rule,area_support,method_status
+1,0.20999151812466055,0.3,0.3,VERIFY_ORIGINAL_FORMULA,Unique UTC days >= 3,10m pixel-center evaluation,REVIEW
+2,0.20999151812466055,0.3,0.3,Median of per-scene indices,Post unique UTC days >= 3,10m pixel-area sum,REVIEW
+3,0.20999151812466055,0.3,0.3,Median of per-scene indices,Post unique UTC days >= 3,10m pixel-area sum,REVIEW
+4,0.20999151812466055,0.3,0.3,Median of per-scene indices,Post unique UTC days >= 3,10m pixel-area sum,REVIEW
+5,0.20999151812466055,0.3,0.3,Median of per-scene indices,Post unique UTC days >= 3,10m pixel-area sum,REVIEW
