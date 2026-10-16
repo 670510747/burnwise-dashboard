@@ -1,48 +1,47 @@
-# BurnWise Plot Workbook
+# BurnWise REVIEWED(4) — คงหน้าตาเดิม อัปเดตผลรอบใหม่
 
-## ใช้งานในเครื่อง
+ใช้ CSS เดิมทุกตัวจาก app 2.py คงธีม การ์ด เมนู sidebar และคอลัมน์
 
-เปิด Terminal ในโฟลเดอร์นี้แล้วรัน:
+## ใช้ทันที
+นำ app.py, requirements.txt, .gitattributes, .streamlit/ และ data/ ใน ZIP นี้วางที่ root ของ repository
+เปิดหน้าภาพรวม คุณภาพข้อมูล ผลประเมิน และเกี่ยวกับโครงการได้ทันทีโดยไม่ต้องอัปโหลด
+ผลสรุปอ้างอิง notebook REVIEWED(4) และ CSV audit ที่แนบ ไม่ได้รัน Earth Engine ใหม่
+ตารางรายเดือนกุมภาพันธ์–พฤษภาคมนำมาจาก saved HTML outputs O3.7/O3.17
+ค่า GISTDA area และ BW/GISTDA ratio ใน output มีทศนิยม 3 ตำแหน่ง จึงระบุไว้บนเว็บ
+เมตริกมกราคมคำนวณจาก TN/FP/FN/TP จำนวนเต็มที่บันทึกใน O2.4
 
-```bash
-python -m pip install -r requirements.txt
-python -m streamlit run app.py
-```
+## เปิดรายละเอียดรายแปลง — ไม่ต้องรันส่วนหลักใหม่
+ไฟล์แนบครั้งนี้ยังไม่มี master CSV ใหม่ จึงไม่ใส่ master รอบเก่าในชุดนี้
+แตก ZIP ไว้ในเครื่อง เช่น D:/BurnWise_Reviewed4
+ที่ท้าย notebook REVIEWED(4) ใน kernel เดิมที่รันเสร็จแล้ว เพิ่มเซลล์:
 
-ข้อมูลจริงอยู่ใน `data/` แล้ว ไม่ต้องอัปโหลดข้อมูลที่หน้าเว็บ ไม่มีข้อมูล demo ปะปน
+%run -i "D:/BurnWise_Reviewed4/export_web_bundle.py"
 
-## แทนที่เว็บ Streamlit เดิม
+แก้เฉพาะ path ให้ตรงตำแหน่งไฟล์จริง สคริปต์อ่านตัวแปร master_plots, THRESHOLD และช่วงเวลาใน kernel ที่มีอยู่
+สคริปต์ตรวจจำนวน 47,311 แปลงและสถานะ Burn 3,403 / No Burn 38,787 / ข้อมูลไม่พอ 5,121
+สร้าง ZIP ชื่อ burnwise_reviewed4_web_export.zip ใน working directory ของ notebook
+นำไฟล์ทั้งหมดใน ZIP นั้นวางที่ root ของ repo แล้ว Reboot แอป
+จะมี master ใหม่และ manifest พร้อม SHA256 ที่ตรงกัน เปิดตารางรายแปลงได้โดยอัตโนมัติ
+ไม่มีการเรียก Earth Engine จากสคริปต์ส่งออกนี้
+หากเปลี่ยนผลรันอีกครั้ง ให้ปรับ snapshot/summary เป็นรอบเดียวกันก่อนส่งออก
 
-นำ `app.py`, `requirements.txt`, โฟลเดอร์ `data/`, `assets/` และ `.streamlit/` รวมถึง `.gitattributes` ขึ้น repository เดิม โดยวาง app.py ที่ root ตาม main file เดิม ให้ Streamlit ติดตั้ง dependencies ใหม่แล้วเปิดเว็บตรวจ ผลงานนี้ไม่ได้ push GitHub หรือ deploy ให้แล้ว
+ห้ามคัดลอก master เก่าใส่ data/ เพราะ threshold และจำนวนแปลงเปลี่ยนแล้ว เว็บตรวจ hash ก่อนเปิด
+อย่าแก้ manifest เพื่อข้ามการตรวจ หาก kernel ไม่ตรงกันต้องใช้ผลรันที่ถูกชุด
 
-## สิ่งที่เปลี่ยนจาก app 2.py
+## ผลรอบใหม่
+- pre 2025-10-01 ถึงก่อน 2026-01-01: 26 scenes / 22 unique UTC days
+- post มกราคม 2026: 13 scenes / 12 unique UTC days
+- threshold 0.20999151812466055, Positive-dNBR Otsu experimental baseline
+- ภาพเพียงพอ 42,190 / 47,311 = 89.18%; รอภาพ 5,121
+- ผลเทียบ GISTDA 41,447 แปลง: TN 27,726 FP 2,093 FN 10,387 TP 1,241
+- Precision 37.22%, Recall 10.67%, F1 16.59%; satellite product agreement ไม่ใช่ independent ground truth
+- ตารางกับ raster ต่างเกิน 2 pp 23 แปลง ป้ายเปลี่ยน 14 แปลง
+- May baseline coverage 7.52%; method review และ GISTDA lineage ยังไม่ปิด
+- O3.16 ต่างเพียง 0.0625 ไร่จาก inclusive/strict NDVI ไม่ได้รับรองความเหมือนกันของทุกเดือน
+- O3.14 sensitivity เป็นการคำนวณแยก ห้ามแทน baseline
 
-- ตารางรายแปลงเป็นหน้าหลัก แสดง 50 แถวต่อหน้าและเลื่อนดูตารางได้
-- ใช้ข้อมูลภาพเพียงพอเป็นค่าเริ่มต้น เลือกทั้งหมดหรือรอภาพได้
-- กรองตำบล สถานะ รหัสแปลง และเรียงตามขนาดแปลง/สัญญาณ/coverage
-- รหัสแปลงกดได้ เปิดรายละเอียดในหน้าเดียวกันโดยเก็บ filter ใน URL
-- รายละเอียดแสดง signal, coverage, สถานะ logistics, เหตุผลตรวจ และ GISTDA เมื่อมี
-- พิกัดเป็น centroid เท่านั้น มีลิงก์ Google Maps ไม่อ้างเป็นขอบเขตหรือทางเข้าแปลง
-- สลับ English/ไทย และ light/dark/black & white แยกตาม session
-- ฟอนต์ไทยแนบใน assets พร้อม OFL license ไม่ต้องโหลดฟอนต์จากเว็บขณะใช้งาน
-- CSV และ Excel export ตามตัวกรอง รวม download รายแปลง
-- ตัวเลขทั้งหมด/ภาพเพียงพอ/รอภาพอยู่เสมอ ไม่มีการลบ Unknown ออกจากข้อมูลหลัก
-- ไม่มีกราฟเป็นหน้าหลัก ผลเทียบผลิตภัณฑ์อยู่ในส่วนเปิดอ่านเพิ่มเติม
-- รายงาน 5 discrepancy และ ground truth ที่ยังไม่มีอย่างชัดเจน
+## รันในเครื่อง
+pip install -r requirements.txt
+streamlit run app.py
 
-## ความหมายข้อมูล
-
-Burn signal = เข้าเกณฑ์ปัจจุบัน, No burn signal = ไม่เข้าเกณฑ์ตรวจพบ, insufficient imagery = ยังจัดสถานะไม่ได้ ค่า Access Gap ที่หายไม่แทนด้วยศูนย์ ชุดนี้เป็นผลมกราคม 2026 ที่มีภาพเพียงพอ 1,229/47,316 แปลง จึงยังสรุปทั้งอำเภอไม่ได้
-
-## การทดสอบและข้อจำกัด
-
-ตรวจด้วย Streamlit AppTest และ Chromium ในเครื่อง: โหลดข้อมูลจริง, filter, ภาษา/ธีม และเปิดรายละเอียดแปลง ไม่มีการรัน Earth Engine ใหม่ ไม่ใช่ spreadsheet editor: ตารางใช้ดูและคัดกรอง ไม่เขียน label กลับไปยังข้อมูลหลัก ฟอนต์ Noto Sans Thai ใช้ SIL Open Font License ตามไฟล์ assets/OFL-NotoSansThai.txt
-
-เมื่ออัปเดตข้อมูล ต้องเปลี่ยนไฟล์ทั้ง bundle จาก run เดียวกันแล้ว restart/clear cache อย่านำ master ใหม่ปน validation เก่า ไฟล์ .gz เป็น binary ตาม .gitattributes
-
-## API reference
-
-https://docs.streamlit.io/develop/api-reference/text/st.html
-https://docs.streamlit.io/develop/api-reference/caching-and-state/st.query_params
-
-Font source: https://github.com/google/fonts/tree/main/ofl/notosansthai
+ยังไม่ได้ deploy ไปยังเว็บออนไลน์
