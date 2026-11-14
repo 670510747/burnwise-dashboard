@@ -4,6 +4,19 @@
 
 BurnWise brings plot-level screening results, imagery coverage, monthly summaries and preliminary satellite-product comparisons into a Streamlit application. It helps users identify what the observations support and which plots need further review before field or policy decisions.
 
+## Dashboard Preview
+
+[Open the BurnWise Dashboard](https://burnwise-dashboard-appbctyh2gj9ddbwadjall.streamlit.app/)
+
+### Overview
+<img width="1920" height="1080" alt="overview png" src="https://github.com/user-attachments/assets/5abfee86-a019-47db-9a34-bdd87fad36eb" />
+
+### Explore Plots
+<img width="1920" height="1080" alt="explore png" src="https://github.com/user-attachments/assets/3f5a019e-9594-4d9b-9068-0bd7ada14557" />
+
+### Data Quality
+<img width="1920" height="1080" alt="data-quality png" src="https://github.com/user-attachments/assets/13654d1e-23a8-4802-a94f-7359d2dfcf47" />
+
 ## Project highlights
 
 - Includes **47,311 agricultural plot records** in the bundled REVIEWED(4) assessment.
